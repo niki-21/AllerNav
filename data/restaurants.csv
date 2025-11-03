@@ -1,0 +1,19 @@
+id,name,city,lat,lon,cuisine,cross_contact,verified_score,vibe_tags
+cava_cp,CAVA College Park,College Park,38.983,-76.943,"mediterranean|fast_casual","tahini_bar",0.7,"casual|vegan-friendly|family"
+habanero_cp,Taqueria Habanero,College Park,38.982,-76.938,"mexican","shared_fryer",0.45,"casual|late-night"
+hall_cp,The Hall CP,College Park,38.9828,-76.9357,"american","",0.5,"date night|family"
+bagels_cp,Bagels n Grinds,College Park,38.9809,-76.9393,"american|bakery","bakery",0.4,"study spot|casual"
+pho_cp,Pho Thom,College Park,38.9769,-76.9342,"vietnamese","",0.55,"casual|family"
+
+cava_dc,CAVA Chinatown,"Washington, DC",38.8981,-77.0212,"mediterranean|fast_casual","tahini_bar",0.72,"casual|vegan-friendly|family"
+rasa_dc,RASA Navy Yard,"Washington, DC",38.8732,-77.0072,"indian|fast_casual","open_kitchen_nuts",0.6,"casual|family"
+busboys_dc,Busboys and Poets,"Washington, DC",38.9372,-77.0230,"american","",0.55,"study spot|family"
+falafel_dc,Falafel Inc Georgetown,"Washington, DC",38.9056,-77.0625,"mediterranean|vegan","",0.65,"vegan-friendly|casual"
+lilsesame_dc,Little Sesame Downtown,"Washington, DC",38.9037,-77.0405,"mediterranean","tahini_bar",0.6,"vegan-friendly|casual"
+
+cava_ny,CAVA NoHo,"New York, NY",40.7273,-73.9921,"mediterranean|fast_casual","tahini_bar",0.7,"casual|vegan-friendly|study spot"
+westville_ny,Westville East,"New York, NY",40.7266,-73.9832,"american","",0.6,"casual|date night"
+raku_ny,Raku East Village,"New York, NY",40.7288,-73.9887,"japanese","tempura_station",0.45,"date night"
+los_tacos_ny,Los Tacos No.1 Chelsea,"New York, NY",40.7423,-74.0060,"mexican","shared_fryer",0.5,"casual|late-night"
+planta_ny,PLANTA Union Square,"New York, NY",40.7357,-73.9893,"vegan|asian_fusion","soy_station",0.65,"date night|vegan-friendly"
+
