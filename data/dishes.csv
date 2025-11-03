@@ -1,0 +1,30 @@
+rid,dish_id,name,desc,inferred_allergens,confidence,inference_reason
+cava_cp,cava_cp_bowl1,Greens+Grains w/ Chicken,"greens, grains, chicken, hummus, tahini, pickles","sesame",0.7,"tahini contains sesame; hummus sesame risk"
+cava_cp,cava_cp_bowl2,Falafel Bowl,"falafel, hummus, tomato-cucumber, pita chips","gluten|sesame",0.7,"pita chips gluten; tahini sesame"
+cava_cp,cava_cp_bowl3,Lentil Avocado Bowl,"lentils, avocado, pickled onions, lemon herb tahini","sesame",0.7,"tahini"
+cava_cp,cava_cp_bowl4,Harissa Chicken Pita,"pita, chicken, harissa, yogurt","gluten|dairy",0.8,"pita gluten; yogurt dairy"
+cava_cp,cava_cp_bowl5,Build Your Own (no sauces),"greens, grains, protein","",0.5,"customizable omission reduces allergen exposure"
+
+habanero_cp,habanero_cp_1,Chicken Tacos,"corn tortillas, chicken, onion, cilantro","",0.6,"corn tortillas typically gluten-free"
+habanero_cp,habanero_cp_2,Carne Asada Tacos,"corn tortillas, steak, salsa","",0.6,"beef tacos usually safe; confirm salsa"
+habanero_cp,habanero_cp_3,Chips & Salsa,"corn chips, salsa","gluten",0.5,"shared fryer risk for chips"
+habanero_cp,habanero_cp_4,Chicken Quesadilla,"flour tortilla, cheese, chicken","gluten|dairy",0.6,"contains cheese + flour wrap"
+habanero_cp,habanero_cp_5,Street Corn,"corn, mayo, cotija","dairy|egg",0.6,"mayo egg; cotija dairy"
+
+rasa_dc,rasa_dc_1,Chicken Tikka Bowl,"rice, chicken tikka, cucumber, pickled onion","dairy",0.6,"tikka marinade may contain yogurt"
+rasa_dc,rasa_dc_2,Saag Bowl,"greens, paneer, spices","dairy",0.7,"paneer dairy"
+rasa_dc,rasa_dc_3,Chana Bowl,"chickpeas, rice, tomato","",0.6,"chickpeas naturally allergen-friendly"
+rasa_dc,rasa_dc_4,Lamb Kebab Bowl,"lamb, rice, chutney","",0.5,"check chutney contents"
+rasa_dc,rasa_dc_5,Build Your Own (no chutneys),"base, protein, veg","",0.5,"omit sauce to reduce risk"
+
+lilsesame_dc,lilsesame_dc_1,Classic Hummus Bowl,"hummus, pita, toppings","sesame|gluten",0.7,"tahini sesame; pita gluten"
+lilsesame_dc,lilsesame_dc_2,Green Tahini Salad,"greens, tahini dressing","sesame",0.8,"tahini"
+lilsesame_dc,lilsesame_dc_3,Chicken Shawarma Bowl,"chicken, rice, pickles, garlic sauce","egg",0.5,"aioli/mayo style"
+lilsesame_dc,lilsesame_dc_4,Roasted Cauli Bowl,"cauliflower, herbs, tahini","sesame",0.7,"tahini"
+lilsesame_dc,lilsesame_dc_5,Fries,"potato, oil","gluten",0.4,"shared fryer risk"
+
+raku_ny,raku_ny_1,Chicken Udon,"wheat udon, chicken broth","gluten",0.9,"udon noodles contain wheat"
+raku_ny,raku_ny_2,Beef Udon,"wheat udon, beef broth","gluten",0.9,""
+raku_ny,raku_ny_3,Tuna Tataki,"tuna, soy, sesame","soy|sesame",0.8,"soy marinade; sesame seeds"
+raku_ny,raku_ny_4,Edamame,"soybeans, salt","soy",0.8,"soy protein"
+raku_ny,raku_ny_5,Miso Soup,"miso (soy), bonito (fish)","soy|fish",0.7,"traditional miso uses fish broth"
