@@ -3,7 +3,7 @@
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "python",
-    "AZURE_SERVICE_BUS_WORKER": "Endpoint=sb://...",
+    "AZURE_SERVICE_BUS_CONNECTION_STRING": "",
     "AZURE_SERVICE_BUS_MENU_QUEUE": "menu-refresh",
     "SUPABASE_URL": "",
     "SUPABASE_SERVICE_ROLE_KEY": "",
@@ -14,7 +14,9 @@
     "AZURE_SEARCH_INDEX_NAME": "allernav-menu-evidence",
     "AZURE_OPENAI_ENDPOINT": "",
     "AZURE_OPENAI_API_KEY": "",
+    "AZURE_OPENAI_EMBEDDING_DEPLOYMENT": "",
     "AZURE_OPENAI_CHAT_DEPLOYMENT": "",
-    "AZURE_OPENAI_CHAT_API_VERSION": "2024-10-21"
+    "AZURE_OPENAI_CHAT_API_VERSION": "2024-10-21",
+    "APIFY_TOKEN": ""
   }
 }

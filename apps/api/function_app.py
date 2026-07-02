@@ -12,12 +12,19 @@ app = func.FunctionApp()
 
 
 @app.service_bus_queue_trigger(
-    arg_name="message",
-    queue_name="%AZURE_SERVICE_BUS_MENU_QUEUE%",
-    connection="AZURE_SERVICE_BUS_WORKER",
+    arg_name="msg",
+    queue_name="menu-refresh",
+    connection="AZURE_SERVICE_BUS_CONNECTION_STRING",
 )
-def process_menu_refresh(message: func.ServiceBusMessage) -> None:
-    payload = parse_menu_refresh_message(message.get_body())
-    attempt = int(getattr(message, "delivery_count", 1) or 1)
-    logging.info("Processing menu refresh job %s (attempt %s)", payload.job_id, attempt)
-    process_menu_refresh_message(payload, attempt=attempt)
+def process_menu_refresh(msg: func.ServiceBusMessage) -> None:
+    body = msg.get_body().decode("utf-8")
+    message = parse_menu_refresh_message(body)
+    attempt = int(getattr(msg, "delivery_count", 1) or 1)
+    job = process_menu_refresh_message(message, attempt=attempt)
+    logging.info(
+        "Menu refresh worker completed job_id=%s place_id=%s status=%s item_count=%s",
+        job.id,
+        job.place_id,
+        job.status,
+        job.item_count,
+    )

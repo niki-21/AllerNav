@@ -176,7 +176,26 @@ AZURE_OPENAI_CHAT_DEPLOYMENT=
 AZURE_OPENAI_CHAT_API_VERSION=2024-10-21
 ```
 
-Run `apps/api/supabase.sql` before enabling the queue so `menu_refresh_jobs` and `menu_document_pages` exist. Deployment commands and RBAC setup are documented in `apps/api/AZURE_MENU_WORKER.md`.
+Run `apps/api/supabase.sql` before enabling the queue so `menu_refresh_jobs` and `menu_document_pages` exist. Deployment commands and worker credential setup are documented in `apps/api/AZURE_MENU_WORKER.md`.
+
+### Azure Functions menu worker
+
+The Python v2 Function in `apps/api/function_app.py` consumes the `menu-refresh` queue and calls the shared `process_menu_refresh_message` worker. The Function requires a listen-capable `AZURE_SERVICE_BUS_CONNECTION_STRING` plus Supabase, Document Intelligence, Azure AI Search, Azure OpenAI, and optional Apify settings listed in `apps/api/local.settings.json.example`.
+
+```bash
+cd apps/api
+python3 -m pip install -r requirements.txt
+func azure functionapp publish "$FUNCTION_APP" --python
+```
+
+Before publishing, run the worker directly without Service Bus:
+
+```bash
+cd apps/api
+PYTHONPATH=. python3 scripts/test_menu_worker_message.py ./sample-menu-job.json
+```
+
+After enqueueing a menu refresh, poll `/api/menu-refresh-jobs/{job_id}` and confirm that the Service Bus active-message count decreases. Stream invocation output with `az functionapp log tail --resource-group "$AZURE_RESOURCE_GROUP" --name "$FUNCTION_APP"`; successful entries include `job_id`, `place_id`, `status`, and `item_count`. Full infrastructure, app settings, verification, and dead-letter guidance are in `apps/api/AZURE_MENU_WORKER.md`.
 
 Check durable persistence without exposing credentials:
 

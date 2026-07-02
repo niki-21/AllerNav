@@ -1,6 +1,6 @@
 # Azure Menu Worker Setup
 
-The FastAPI deployment sends menu jobs with a send-only Service Bus credential. The Azure Function consumes jobs through its managed identity, runs OCR and LangChain normalization, stores results in Supabase, and indexes Azure AI Search.
+The FastAPI deployment sends menu jobs with a send-only Service Bus credential. The Python v2 Azure Function consumes `menu-refresh` jobs with a listen-only connection string, runs OCR and LangChain normalization, stores results in Supabase, and indexes Azure AI Search.
 
 ## Create Infrastructure
 
@@ -37,6 +37,13 @@ az servicebus queue authorization-rule create \
   --name allernav-api-send \
   --rights Send
 
+az servicebus queue authorization-rule create \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --namespace-name "$SERVICE_BUS_NAMESPACE" \
+  --queue-name "$MENU_QUEUE" \
+  --name allernav-worker-listen \
+  --rights Listen
+
 az storage account create \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --name "$FUNCTION_STORAGE" \
@@ -53,29 +60,6 @@ az functionapp create \
   --functions-version 4 \
   --os-type Linux
 
-az functionapp identity assign \
-  --resource-group "$AZURE_RESOURCE_GROUP" \
-  --name "$FUNCTION_APP"
-```
-
-Grant the Function permission to receive queue messages:
-
-```bash
-export FUNCTION_PRINCIPAL_ID=$(az functionapp identity show \
-  --resource-group "$AZURE_RESOURCE_GROUP" \
-  --name "$FUNCTION_APP" \
-  --query principalId -o tsv)
-
-export SERVICE_BUS_ID=$(az servicebus namespace show \
-  --resource-group "$AZURE_RESOURCE_GROUP" \
-  --name "$SERVICE_BUS_NAMESPACE" \
-  --query id -o tsv)
-
-az role assignment create \
-  --assignee-object-id "$FUNCTION_PRINCIPAL_ID" \
-  --assignee-principal-type ServicePrincipal \
-  --role "Azure Service Bus Data Receiver" \
-  --scope "$SERVICE_BUS_ID"
 ```
 
 ## Configure Deployments
@@ -93,6 +77,17 @@ az servicebus queue authorization-rule keys list \
 
 Store that output as `AZURE_SERVICE_BUS_SEND_CONNECTION_STRING` in `allernav-api`. Also set `AZURE_SERVICE_BUS_MENU_QUEUE=menu-refresh`.
 
+Get the listen-only value for the Azure Function:
+
+```bash
+export AZURE_SERVICE_BUS_CONNECTION_STRING=$(az servicebus queue authorization-rule keys list \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --namespace-name "$SERVICE_BUS_NAMESPACE" \
+  --queue-name "$MENU_QUEUE" \
+  --name allernav-worker-listen \
+  --query primaryConnectionString -o tsv)
+```
+
 Configure the Function. Replace placeholder values without committing secrets:
 
 ```bash
@@ -100,7 +95,7 @@ az functionapp config appsettings set \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --name "$FUNCTION_APP" \
   --settings \
-    "AZURE_SERVICE_BUS_WORKER__fullyQualifiedNamespace=${SERVICE_BUS_NAMESPACE}.servicebus.windows.net" \
+    "AZURE_SERVICE_BUS_CONNECTION_STRING=$AZURE_SERVICE_BUS_CONNECTION_STRING" \
     "AZURE_SERVICE_BUS_MENU_QUEUE=${MENU_QUEUE}" \
     "SUPABASE_URL=$SUPABASE_URL" \
     "SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY" \
@@ -111,8 +106,10 @@ az functionapp config appsettings set \
     "AZURE_SEARCH_INDEX_NAME=$AZURE_SEARCH_INDEX_NAME" \
     "AZURE_OPENAI_ENDPOINT=$AZURE_OPENAI_ENDPOINT" \
     "AZURE_OPENAI_API_KEY=$AZURE_OPENAI_API_KEY" \
+    "AZURE_OPENAI_EMBEDDING_DEPLOYMENT=$AZURE_OPENAI_EMBEDDING_DEPLOYMENT" \
     "AZURE_OPENAI_CHAT_DEPLOYMENT=$AZURE_OPENAI_CHAT_DEPLOYMENT" \
-    "AZURE_OPENAI_CHAT_API_VERSION=$AZURE_OPENAI_CHAT_API_VERSION"
+    "AZURE_OPENAI_CHAT_API_VERSION=$AZURE_OPENAI_CHAT_API_VERSION" \
+    "APIFY_TOKEN=$APIFY_TOKEN"
 ```
 
 Deploy from the shared Python application directory:
@@ -121,6 +118,16 @@ Deploy from the shared Python application directory:
 cd apps/api
 python3 -m pip install -r requirements.txt
 func azure functionapp publish "$FUNCTION_APP" --python
+```
+
+For local configuration, copy `local.settings.json.example` to the gitignored `local.settings.json`, fill in the values, and run `func start`. Test the worker logic without Service Bus first:
+
+```bash
+cd apps/api
+PYTHONPATH=. python3 scripts/test_menu_worker_message.py
+
+# Or provide inline JSON/a JSON file.
+PYTHONPATH=. python3 scripts/test_menu_worker_message.py ./sample-menu-job.json
 ```
 
 ## Verify
@@ -135,3 +142,20 @@ curl -X POST \
 curl "https://allernav-api.vercel.app/api/menu-refresh-jobs/JOB_ID"
 curl "https://allernav-api.vercel.app/api/places/forever-thai/menu"
 ```
+
+Confirm that the active message count decreases and inspect worker logs:
+
+```bash
+az servicebus queue show \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --namespace-name "$SERVICE_BUS_NAMESPACE" \
+  --name "$MENU_QUEUE" \
+  --query "countDetails.{active:activeMessageCount,deadLetter:deadLetterMessageCount}" \
+  --output table
+
+az functionapp log tail \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --name "$FUNCTION_APP"
+```
+
+Successful invocations include `job_id`, `place_id`, `status`, and `item_count`. Exceptions are intentionally re-raised so the Functions host retries the message and Service Bus dead-letters it after the queue's maximum delivery count.
