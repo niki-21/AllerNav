@@ -76,10 +76,17 @@ def test_restaurant_score_does_not_reward_menu_size_alone() -> None:
     assert vague.insufficient_info_count == 20
 
 
-def test_scan_needed_score_is_capped_and_not_recommended() -> None:
+def test_no_menu_evidence_has_no_numeric_allergy_fit_score() -> None:
     score = score_restaurant_menu(None, [AllergyTag.PEANUT])
-    assert score.score <= 20
-    assert score.label == "Scan needed"
+    assert score.score is None
+    assert score.label == "Menu scan needed"
+
+
+def test_empty_menu_evidence_has_no_numeric_allergy_fit_score() -> None:
+    score = score_restaurant_menu(menu_source([MenuItem(name="Menu")]), [AllergyTag.PEANUT])
+    assert score.score is None
+    assert score.menu_item_count == 0
+    assert score.label == "Menu scan needed"
 
 
 def test_short_but_specific_dishes_are_not_over_penalized() -> None:
@@ -146,6 +153,23 @@ def test_several_possible_items_and_one_avoid_do_not_score_extremely_low() -> No
     assert score.possible_lower_risk_count == 4
     assert score.avoid_count == 1
     assert score.score >= 75
+
+
+def test_allergen_heavy_menu_scores_as_high_concern() -> None:
+    items = [
+        MenuItem(name="Bonito Broth"),
+        MenuItem(name="Grilled Salmon"),
+        MenuItem(name="Tuna Tartare"),
+        MenuItem(name="Cod Plate"),
+        MenuItem(name="Steamed Rice"),
+    ]
+
+    score = score_restaurant_menu(menu_source(items), [AllergyTag.FISH])
+
+    assert score.avoid_count == 4
+    assert score.possible_lower_risk_count == 1
+    assert score.score is not None and score.score <= 24
+    assert score.label == "High concern"
 
 
 def test_buffet_or_shared_prep_signal_lowers_restaurant_score() -> None:

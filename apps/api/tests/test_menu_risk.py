@@ -112,6 +112,22 @@ def test_menu_headers_are_non_food_categories_and_removed() -> None:
     assert [item.name for item in menu.sections[0].items] == ["Soft Boiled Egg"]
 
 
+def test_all_known_category_rows_are_excluded() -> None:
+    category_names = (
+        "Dine-In Menu",
+        "Recommended Toppings Set",
+        "Kids Menu",
+        "Extracted Menu",
+        "Menu",
+        "Add-ons",
+        "Toppings",
+        "Dinner Section",
+        "Lunch Category",
+    )
+
+    assert all(is_non_food_category(MenuItem(name=name)) for name in category_names)
+
+
 def test_kids_ramen_needs_check_for_fish_broth_context() -> None:
     result = classify_menu_item(MenuItem(name="Kids Ramen"), [AllergyTag.FISH])
     assert result.risk_label == "needs_check"
@@ -144,3 +160,24 @@ def test_ramen_broth_is_check_but_dashi_broth_is_avoid_for_fish() -> None:
 
     assert ramen.risk_label == "needs_check"
     assert dashi.risk_label == "avoid"
+
+
+def test_oyster_is_check_for_fish_but_avoid_for_shellfish() -> None:
+    fish_result = classify_menu_item(MenuItem(name="Fresh Oyster"), [AllergyTag.FISH])
+    shellfish_result = classify_menu_item(MenuItem(name="Fresh Oyster"), [AllergyTag.SHELLFISH])
+
+    assert fish_result.risk_label == "needs_check"
+    assert fish_result.matched_allergens == []
+    assert shellfish_result.risk_label == "avoid"
+    assert shellfish_result.matched_allergens == [AllergyTag.SHELLFISH]
+
+
+def test_inferred_fish_without_direct_menu_text_needs_check() -> None:
+    result = classify_menu_item(
+        MenuItem(name="House Ramen", inferred_risks=[AllergyTag.FISH]),
+        [AllergyTag.FISH],
+    )
+
+    assert result.risk_label == "needs_check"
+    assert result.matched_allergens == []
+    assert "direct menu evidence is missing" in result.risk_reasons[0].lower()

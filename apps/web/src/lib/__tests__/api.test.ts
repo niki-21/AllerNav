@@ -27,6 +27,17 @@ test("extractSearchIntent keeps cafe intent near a named location", () => {
   );
 });
 
+test("extractSearchIntent supports food, dinner, sushi, and brunch phrasing", () => {
+  assert.equal(extractSearchIntent("Find French food near me", ""), "French restaurants");
+  assert.equal(extractSearchIntent("Italian dinner", ""), "Italian restaurants");
+  assert.equal(extractSearchIntent("sushi", ""), "sushi restaurants");
+  assert.equal(extractSearchIntent("brunch", ""), "brunch restaurants");
+});
+
+test("extractSearchIntent keeps an existing specific search query", () => {
+  assert.equal(extractSearchIntent("Suggest somewhere nearby", "pizza restaurants"), "pizza restaurants");
+});
+
 test("buildSearchPayload keeps query, center, and allergens aligned", () => {
   assert.deepEqual(
     buildSearchPayload("ramen", { lat: 1, lng: 2 }, ["peanut", "soy"]),
@@ -204,19 +215,27 @@ test("Menu tab leads with the fit score and possible lower-risk section", () => 
   const avoidIndex = source.indexOf('title: "Avoid for your allergies"');
   const insufficientIndex = source.indexOf('title: "Insufficient info"');
 
-  assert.ok(source.includes("Restaurant allergy fit:"));
+  assert.ok(source.includes("Restaurant allergy fit"));
+  assert.ok(source.includes("data.menu?.restaurant_fit_score ?? data.restaurant_fit_score ?? null"));
+  assert.equal(source.includes("data.restaurant_fit_score ?? data.menu?.restaurant_fit_score ?? 20"), false);
   assert.ok(possibleIndex < checkIndex && checkIndex < avoidIndex && avoidIndex < insufficientIndex);
   assert.ok(source.includes('<details className="menu-trace">'));
   assert.equal(source.includes('<details className="menu-trace" open>'), false);
+  const mainMenuStart = source.indexOf('{activeTab === "menu"');
+  const technicalTraceStart = source.indexOf('<details className="menu-trace">', mainMenuStart);
+  const mainMenuView = source.slice(mainMenuStart, technicalTraceStart);
+  assert.equal(mainMenuView.includes("ragStatus"), false);
+  assert.equal(mainMenuView.includes("ocrStatus"), false);
+  assert.equal(mainMenuView.includes('className="menu-source-row"'), false);
 });
 
 test("TrustPanel keeps Overview and Menu restaurant fit messaging consistent", () => {
   const source = readFileSync(new URL("../../components/TrustPanel.tsx", import.meta.url), "utf8");
   assert.ok(source.includes("restaurant-fit-badge"));
-  assert.ok(source.includes("restaurantFitScore >= 70"));
-  assert.ok(source.includes("restaurantFitScore >= 45"));
+  assert.ok(source.includes("(restaurantFitScore ?? 0) >= 70"));
+  assert.ok(source.includes("(restaurantFitScore ?? 0) >= 45"));
   assert.ok(source.includes("agentRecommendation && !hasRestaurantFit"));
-  assert.ok(source.includes("Restaurant allergy fit: {restaurantFitScore} · {restaurantFitLabel}"));
+  assert.ok(source.includes("<strong>Restaurant allergy fit</strong>"));
   assert.ok(source.includes("{restaurantFitScore}</span>"));
   assert.ok(source.includes("Some dishes contain your allergens, but many menu items may be possible lower-risk after staff verification."));
 });

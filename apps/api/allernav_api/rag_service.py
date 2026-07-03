@@ -42,7 +42,9 @@ INTENT_TERMS: dict[str, tuple[str, ...]] = {
     "mexican": ("mexican", "taqueria", "taco"),
     "mediterranean": ("mediterranean",),
     "middle eastern": ("middle eastern", "lebanese", "persian"),
-    "burger": ("burger",),
+    "burger": ("burger", "american", "fast casual", "fast food"),
+    "sushi": ("sushi", "japanese"),
+    "brunch": ("brunch", "breakfast", "cafe"),
     "cafe": ("cafe", "cafes", "coffee", "coffee shop", "bakery"),
     "vegan": ("vegan",),
     "vegetarian": ("vegetarian",),
@@ -274,7 +276,7 @@ def build_place_suggestion(
     )
     return NearbyPlaceSuggestion(
         place=place,
-        confidence=round(fit.score / 100, 2) if fit.menu_item_count > 0 else 0,
+        confidence=round(fit.score / 100, 2) if fit.score is not None else 0,
         evidence_status="scanned" if fit.menu_item_count > 0 else "scan_needed",
         restaurant_fit_score=fit.score if fit.menu_item_count > 0 else None,
         restaurant_fit_label=fit.label,

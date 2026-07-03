@@ -9,7 +9,7 @@ from .risk_engine import ALLERGEN_TERMS, term_matches
 
 @dataclass(frozen=True)
 class RestaurantFitScore:
-    score: int
+    score: int | None
     label: str
     menu_item_count: int
     avoid_count: int
@@ -76,8 +76,8 @@ def score_restaurant_menu(
 ) -> RestaurantFitScore:
     if not selected_allergens:
         return RestaurantFitScore(
-            score=0,
-            label="Scan needed",
+            score=None,
+            label="No allergies selected",
             menu_item_count=sum(len(section.items) for section in source.sections) if source else 0,
             avoid_count=0,
             needs_check_count=0,
@@ -91,8 +91,8 @@ def score_restaurant_menu(
         )
     if source is None:
         return RestaurantFitScore(
-            score=20,
-            label="Scan needed",
+            score=None,
+            label="Menu scan needed",
             menu_item_count=0,
             avoid_count=0,
             needs_check_count=0,
@@ -122,8 +122,8 @@ def score_restaurant_menu(
     item_count = len(classified)
     if item_count == 0:
         return RestaurantFitScore(
-            score=20,
-            label="Scan needed",
+            score=None,
+            label="Menu scan needed",
             menu_item_count=0,
             avoid_count=0,
             needs_check_count=0,

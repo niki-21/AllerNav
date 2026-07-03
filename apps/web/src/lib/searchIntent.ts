@@ -1,4 +1,6 @@
 const CUISINE_INTENTS: Array<[RegExp, string]> = [
+  [/\bsushi\b/i, "sushi restaurants"],
+  [/\bbrunch\b/i, "brunch restaurants"],
   [/\bfrench\b/i, "French restaurants"],
   [/\bitalian\b/i, "Italian restaurants"],
   [/\bthai\b/i, "Thai restaurants"],
@@ -13,6 +15,8 @@ const CUISINE_INTENTS: Array<[RegExp, string]> = [
   [/\bvegetarian\b/i, "Vegetarian restaurants"],
 ];
 
+const GENERIC_SEARCH_QUERIES = new Set(["", "restaurant", "restaurants", "nearby restaurants"]);
+
 function locationSuffix(question: string): string {
   const match = question.match(/\b(?:going to|near|around)\s+([A-Z][\w'-]*(?:\s+[A-Z][\w'-]*){0,3})/);
   return match?.[1] ? ` near ${match[1].replace(/\s+(?:I|we)$/i, "").trim()}` : "";
@@ -20,6 +24,10 @@ function locationSuffix(question: string): string {
 
 export function extractSearchIntent(question: string, currentSearchQuery: string): string {
   const normalizedQuestion = question.trim();
+  const normalizedCurrentQuery = currentSearchQuery.trim();
+  if (normalizedCurrentQuery && !GENERIC_SEARCH_QUERIES.has(normalizedCurrentQuery.toLowerCase())) {
+    return normalizedCurrentQuery;
+  }
   const location = locationSuffix(normalizedQuestion);
 
   const cafeMatch = normalizedQuestion.match(/\b((?:cute|cozy|quiet|cheap)\s+)?caf(?:e|é)s?\b/i);

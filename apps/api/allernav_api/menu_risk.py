@@ -77,14 +77,18 @@ FISH_SHELLFISH_CONTEXT_TERMS = (
 )
 
 NON_FOOD_CATEGORY_NAMES = {
+    "add on",
     "add-ons",
     "add ons",
+    "addons",
     "dine-in menu",
     "dine in menu",
     "extracted menu",
     "kids menu",
     "menu",
     "recommended toppings set",
+    "recommended toppings",
+    "topping",
     "toppings",
 }
 
@@ -113,6 +117,7 @@ def is_non_food_category(item: MenuItem) -> bool:
     return (
         normalized_name.endswith(" menu")
         or normalized_name.endswith(" section")
+        or normalized_name.endswith(" category")
         or normalized_name in VAGUE_ITEM_NAMES
     )
 
@@ -143,10 +148,13 @@ def classify_menu_item(
             allergen
             for allergen in selected_allergens
             if allergen in item.confirmed_allergens
-            or allergen in item.inferred_risks
             or any(term_matches(allergen_text, term) for term in ALLERGEN_TERMS[allergen])
             or any(term_matches(allergen_text, term) for term in MENU_ALLERGEN_ALIASES.get(allergen, ()))
         },
+        key=lambda allergen: allergen.value,
+    )
+    inferred_matches = sorted(
+        set(selected_allergens).intersection(item.inferred_risks),
         key=lambda allergen: allergen.value,
     )
     source_quality = item.ocr_confidence if item.ocr_confidence is not None else source_confidence
@@ -163,6 +171,18 @@ def classify_menu_item(
                 "risk_reasons": [f"Menu text or structured evidence identifies selected allergen: {labels}."],
                 "verification_question": f"Can you confirm whether {name} contains {labels} in any ingredient or garnish?",
                 "confidence": round(min(0.98, max(0.78, source_quality + 0.12)), 2),
+            }
+        )
+
+    if inferred_matches:
+        labels = ", ".join(allergen.value.replace("_", " ") for allergen in inferred_matches)
+        return item.model_copy(
+            update={
+                "risk_label": "needs_check",
+                "matched_allergens": [],
+                "risk_reasons": [f"Extraction flagged possible {labels}, but direct menu evidence is missing."],
+                "verification_question": f"Can you confirm whether {name} contains {labels} in any ingredient or preparation step?",
+                "confidence": round(min(0.78, max(0.48, source_quality - 0.08)), 2),
             }
         )
 

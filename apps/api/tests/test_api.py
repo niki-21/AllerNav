@@ -341,8 +341,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(dumped["id"], "alpha")
         self.assertEqual(dumped["selected_allergens"], ["peanut"])
         self.assertIn("score_summary", dumped)
-        self.assertEqual(dumped["restaurant_fit_score"], 20)
-        self.assertEqual(dumped["restaurant_fit_label"], "Scan needed")
+        self.assertIsNone(dumped["restaurant_fit_score"])
+        self.assertEqual(dumped["restaurant_fit_label"], "Menu scan needed")
         self.assertGreaterEqual(len(dumped["evidence"]), 1)
         self.assertIn("explanation", dumped)
 

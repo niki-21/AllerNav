@@ -269,12 +269,12 @@ export default function TrustPanel({
     avoid: data.menu?.avoid_count ?? avoidMenuItems.length,
     insufficient: data.menu?.insufficient_info_count ?? insufficientMenuItems.length,
   };
-  const restaurantFitScore = data.restaurant_fit_score ?? data.menu?.restaurant_fit_score ?? 20;
+  const restaurantFitScore = data.menu?.restaurant_fit_score ?? data.restaurant_fit_score ?? null;
   const restaurantFitLabel =
-    data.restaurant_fit_label ?? data.menu?.restaurant_fit_label ?? (menuItemCount > 0 ? "Needs verification" : "Scan needed");
-  const restaurantFitReason = data.restaurant_fit_reason ?? data.menu?.restaurant_fit_reason ?? null;
+    data.menu?.restaurant_fit_label ?? data.restaurant_fit_label ?? (menuItemCount > 0 ? "Needs verification" : "Menu scan needed");
+  const restaurantFitReason = data.menu?.restaurant_fit_reason ?? data.restaurant_fit_reason ?? null;
   const hasRestaurantFit = allergyMode && menuItemCount > 0 && restaurantFitScore != null;
-  const restaurantFitTone = restaurantFitScore >= 70 ? "good" : restaurantFitScore >= 45 ? "caution" : "risk";
+  const restaurantFitTone = (restaurantFitScore ?? 0) >= 70 ? "good" : (restaurantFitScore ?? 0) >= 45 ? "caution" : "risk";
   const restaurantFitMessage =
     restaurantFitReason ?? (menuBucketCounts.avoid > 0 && menuBucketCounts.possible > 0
       ? "Some dishes contain your allergens, but many menu items may be possible lower-risk after staff verification."
@@ -297,7 +297,6 @@ export default function TrustPanel({
         : `Apify is configured, but no expanded reviews were returned for this place. Showing ${reviewSource.google_review_count} Google snippet${reviewSource.google_review_count === 1 ? "" : "s"}.`
       : `Apify is not configured for this running server. Showing Google’s limited review sample of ${reviewSource.google_review_count} snippet${reviewSource.google_review_count === 1 ? "" : "s"}.`
     : "Showing the review snippets returned by the current place details source.";
-  const confidencePercent = Math.round(data.score_summary.evidence_confidence * 100);
   const agentRecommendation = data.agent_recommendation ?? null;
   const agentConfidencePercent = agentRecommendation ? Math.round(agentRecommendation.confidence * 100) : null;
   const openStatus = formatOpenStatus(data);
@@ -336,7 +335,7 @@ export default function TrustPanel({
     ["queued", "running", "discovering", "ocr_processing", "normalizing", "indexing", "needs_background_refresh"].includes(
       menuRefreshJob?.status ?? "",
     );
-  const menuLifecycleLabel =
+  const technicalMenuLifecycleLabel =
     menuItemCount > 0 && indexingStatus === "complete"
       ? "Menu found · RAG index ready"
       : menuItemCount > 0 && refreshPending
@@ -346,6 +345,7 @@ export default function TrustPanel({
           : refreshPending
             ? "Menu scan running"
             : "No menu evidence";
+  const menuLifecycleLabel = menuItemCount > 0 ? "Menu found" : refreshPending ? "Scanning menu" : "Menu scan needed";
   const ocrTrace = menuRefreshJob?.trace.find((step) => step.id === "document_ocr");
   const ocrStatus =
     data.menu?.extraction_method?.includes("azure_document_intelligence") || ocrTrace?.status === "complete"
@@ -458,65 +458,32 @@ export default function TrustPanel({
         <div className="place-tab-panel">
           {hasRestaurantFit && (
             <div className="menu-fit-summary" aria-label="Restaurant allergy fit summary">
-              <strong>
-                Restaurant allergy fit: {restaurantFitScore} · {restaurantFitLabel}
-              </strong>
+              <span className="menu-primary-status">Menu found</span>
+              <div className="menu-fit-heading">
+                <strong>Restaurant allergy fit</strong>
+                <span className={`restaurant-fit-badge ${restaurantFitTone}`}>{restaurantFitScore}</span>
+                <b>{restaurantFitLabel}</b>
+              </div>
               <p>
                 {menuBucketCounts.possible} possible · {menuBucketCounts.check} check · {menuBucketCounts.avoid} avoid
                 {menuBucketCounts.insufficient > 0 ? ` · ${menuBucketCounts.insufficient} insufficient` : ""}
               </p>
-              {restaurantFitReason && <small>{restaurantFitReason}</small>}
             </div>
           )}
-          <div
-            className="place-status-row menu-tab-status-row"
-            title={allergyMode ? `Source confidence ${confidencePercent}%. Evidence fit ${data.score_summary.fit_score}/100.` : "Menu extraction status"}
-            aria-label="Menu and retrieval status"
-          >
-            <span className={menuItemCount > 0 ? "menu-found" : "menu-pending"}>
-              {menuLifecycleLabel}
-            </span>
-            {ragStatus && !menuLifecycleLabel.includes("RAG index ready") && <span className={ragStatus.className}>{ragStatus.label}</span>}
-            {ocrStatus && <span className={ocrStatus.className}>{ocrStatus.label}</span>}
-            {refreshFailed && menuItemCount > 0 && <span className="refresh-failed">Refresh failed</span>}
-          </div>
-          <div className="menu-source-row">
-            <div>
-              <strong>Menu</strong>
+          {!hasRestaurantFit && (
+            <div className="menu-scan-summary">
+              <strong>{menuLifecycleLabel}</strong>
               <p>
                 {menuItemCount > 0
                   ? allergyMode
-                    ? `${menuItemCount} dish-level item${menuItemCount === 1 ? "" : "s"} extracted from available menu evidence. Verify ingredients and prep with staff.`
+                    ? "Allergy fit is updating from the latest menu evidence."
                     : `${menuItemCount} menu item${menuItemCount === 1 ? "" : "s"} found.`
                   : refreshPending
-                    ? "Menu scan is still running."
-                  : refreshFailureDetail
-                    ? refreshFailureDetail
-                  : scanHasRun
-                    ? "No stored menu evidence yet."
-                    : "No menu scanned yet."}
+                  ? "Items will appear as the scan finishes."
+                  : refreshFailureDetail ?? "Scan the official menu before comparing allergy fit."}
               </p>
-              {menuEvidenceLine && <p className="muted-line">{menuEvidenceLine}</p>}
-              {refreshFailed && menuItemCount > 0 && (
-                <p className="menu-refresh-warning">Latest saved menu shown. {refreshFailureDetail}</p>
-              )}
-              {refreshPending && menuItemCount > 0 && (
-                <p className="muted-line">Latest saved menu shown while the refresh continues.</p>
-              )}
             </div>
-            <div className="menu-source-actions">
-              {(data.menu?.source_url || data.menu?.document_url) && (
-                <a className="source-link" href={data.menu.source_url ?? data.menu.document_url ?? ""} target="_blank" rel="noreferrer">
-                  Source
-                </a>
-              )}
-              {menuItemCount > 0 && (
-                <button type="button" className="retry-button" onClick={onRefreshMenu} disabled={refreshPending}>
-                  Refresh menu
-                </button>
-              )}
-            </div>
-          </div>
+          )}
           {refreshPending && menuSections.length === 0 ? (
             <div className="menu-loading-state">
               <strong>Menu scan is still running</strong>
@@ -629,7 +596,7 @@ export default function TrustPanel({
             </article>
           )}
 
-          {(isMenuLoading || menuRefreshJob) && (
+          {(isMenuLoading || menuRefreshJob || menuItemCount > 0) && (
             <details className="menu-trace">
               <summary>
                 <strong>Technical trace</strong>
@@ -643,6 +610,24 @@ export default function TrustPanel({
                         : "Available"}
                 </span>
               </summary>
+              <div className="menu-technical-overview">
+                <p>{technicalMenuLifecycleLabel}</p>
+                {ragStatus && <p>{ragStatus.label}</p>}
+                {ocrStatus && <p>{ocrStatus.label}</p>}
+                {menuEvidenceLine && <p>{menuEvidenceLine}</p>}
+                {restaurantFitReason && <p>{restaurantFitReason}</p>}
+                {refreshFailed && <p>Refresh failed: {refreshFailureDetail}</p>}
+                <div className="menu-technical-actions">
+                  {(data.menu?.source_url || data.menu?.document_url) && (
+                    <a className="source-link" href={data.menu.source_url ?? data.menu.document_url ?? ""} target="_blank" rel="noreferrer">
+                      Open menu source
+                    </a>
+                  )}
+                  <button type="button" className="retry-button" onClick={onRefreshMenu} disabled={refreshPending}>
+                    {refreshPending ? "Scan running" : "Refresh menu"}
+                  </button>
+                </div>
+              </div>
               <div className="menu-trace-list">
                 {(menuRefreshJob?.total_documents ?? 0) > 0 && (
                   <p className="muted-line">
@@ -680,11 +665,14 @@ export default function TrustPanel({
           )}
 
           {allergyMode && (
-            <button type="button" className="ask-button" onClick={onAskRestaurant} disabled={isAskingRestaurant}>
-              {isAskingRestaurant ? "Saving question..." : "Ask restaurant to verify"}
-            </button>
+            <details className="menu-questions">
+              <summary>Questions to ask staff</summary>
+              <button type="button" className="ask-button" onClick={onAskRestaurant} disabled={isAskingRestaurant}>
+                {isAskingRestaurant ? "Saving question..." : "Prepare a verification question"}
+              </button>
+              {askResponse && <p className="menu-job-note">{askResponse.suggested_script}</p>}
+            </details>
           )}
-          {allergyMode && askResponse && <p className="menu-job-note">{askResponse.suggested_script}</p>}
         </div>
       )}
 
