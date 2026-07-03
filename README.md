@@ -182,6 +182,12 @@ Run `apps/api/supabase.sql` before enabling the queue so `menu_refresh_jobs` and
 
 The Python v2 Function in `apps/api/function_app.py` consumes the `menu-refresh` queue and calls the shared `process_menu_refresh_message` worker. The Function requires a listen-capable `AZURE_SERVICE_BUS_CONNECTION_STRING` plus Supabase, Document Intelligence, Azure AI Search, Azure OpenAI, and optional Apify settings listed in `apps/api/local.settings.json.example`.
 
+1. Set `AZURE_SERVICE_BUS_CONNECTION_STRING` in the Function App settings.
+2. Set `AZURE_SERVICE_BUS_MENU_QUEUE=menu-refresh`.
+3. Deploy the Function App.
+4. In Service Bus Explorer, confirm the queue's Active message count decreases.
+5. Check Function App logs for processed jobs, including `job_id`, `place_id`, `status`, and `item_count`.
+
 ```bash
 cd apps/api
 python3 -m pip install -r requirements.txt
