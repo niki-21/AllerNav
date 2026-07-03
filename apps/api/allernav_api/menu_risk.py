@@ -24,9 +24,58 @@ PREPARATION_RISK_TERMS = (
     "shared preparation",
 )
 
+FISH_PREPARATION_CONTEXT_TERMS = (
+    "ramen",
+    "broth",
+    "soup",
+    "soup base",
+    "tare",
+)
+
+FISH_SAUCE_TERMS = ("sauce",)
+FISH_MARINADE_TERMS = ("marinade", "marinated")
+
+FISH_SIMPLE_ITEM_TERMS = (
+    "egg",
+    "rice",
+    "pudding",
+    "dessert",
+    "ice cream",
+    "sorbet",
+    "vegetable",
+    "greens",
+    "mushroom",
+    "corn",
+)
+
 MENU_ALLERGEN_ALIASES: dict[AllergyTag, tuple[str, ...]] = {
-    AllergyTag.FISH: ("seafood", "tilapia", "trout", "haddock", "snapper", "mahi"),
+    AllergyTag.FISH: (
+        "seafood",
+        "tilapia",
+        "trout",
+        "haddock",
+        "snapper",
+        "mahi",
+        "bonito",
+        "sardine",
+        "dashi",
+        "fish sauce",
+        "seafood broth",
+        "seafood stock",
+    ),
     AllergyTag.SHELLFISH: ("seafood", "clam", "mussel", "oyster", "crawfish", "crayfish"),
+}
+
+NON_FOOD_CATEGORY_NAMES = {
+    "add-ons",
+    "add ons",
+    "dine-in menu",
+    "dine in menu",
+    "extracted menu",
+    "kids menu",
+    "menu",
+    "recommended toppings set",
+    "toppings",
 }
 
 VAGUE_ITEM_NAMES = {
@@ -45,11 +94,25 @@ VAGUE_ITEM_NAMES = {
 }
 
 
+def is_non_food_category(item: MenuItem) -> bool:
+    normalized_name = " ".join(item.name.lower().split()).strip(" :-")
+    if normalized_name in NON_FOOD_CATEGORY_NAMES:
+        return True
+    if item.price or (item.description or "").strip():
+        return False
+    return (
+        normalized_name.endswith(" menu")
+        or normalized_name.endswith(" section")
+        or normalized_name in VAGUE_ITEM_NAMES
+    )
+
+
 def classify_menu_item(
     item: MenuItem,
     selected_allergens: list[AllergyTag],
     *,
     source_confidence: float | None = None,
+    section_title: str | None = None,
 ) -> MenuItem:
     if not selected_allergens:
         return item.model_copy(
@@ -64,14 +127,15 @@ def classify_menu_item(
     name = item.name.strip()
     description = (item.description or "").strip()
     text = f"{name} {description}".strip().lower()
+    allergen_text = f"{text} {section_title or ''}".strip().lower()
     matched = sorted(
         {
             allergen
             for allergen in selected_allergens
             if allergen in item.confirmed_allergens
             or allergen in item.inferred_risks
-            or any(term_matches(text, term) for term in ALLERGEN_TERMS[allergen])
-            or any(term_matches(text, term) for term in MENU_ALLERGEN_ALIASES.get(allergen, ()))
+            or any(term_matches(allergen_text, term) for term in ALLERGEN_TERMS[allergen])
+            or any(term_matches(allergen_text, term) for term in MENU_ALLERGEN_ALIASES.get(allergen, ()))
         },
         key=lambda allergen: allergen.value,
     )
@@ -92,7 +156,17 @@ def classify_menu_item(
             }
         )
 
-    preparation_terms = [term for term in PREPARATION_RISK_TERMS if term_matches(text, term)]
+    selected_set = set(selected_allergens)
+    if selected_set == {AllergyTag.FISH}:
+        fish_context_terms = [term for term in FISH_PREPARATION_CONTEXT_TERMS if term_matches(text, term)]
+        simple_fish_item = any(term_matches(text, term) for term in FISH_SIMPLE_ITEM_TERMS)
+        sauce_terms = [term for term in FISH_SAUCE_TERMS if term_matches(text, term)]
+        marinade_terms = [term for term in FISH_MARINADE_TERMS if term_matches(text, term)]
+        preparation_terms = fish_context_terms + marinade_terms + (
+            [] if simple_fish_item or not fish_context_terms else sauce_terms
+        )
+    else:
+        preparation_terms = [term for term in PREPARATION_RISK_TERMS if term_matches(text, term)]
     if preparation_terms:
         term_text = ", ".join(preparation_terms[:3])
         confidence = min(0.82, max(0.5, source_quality - 0.05 + min(len(description.split()), 8) * 0.015))
@@ -100,7 +174,11 @@ def classify_menu_item(
             update={
                 "risk_label": "needs_check",
                 "matched_allergens": [],
-                "risk_reasons": [f"Preparation wording needs staff verification: {term_text}."],
+                "risk_reasons": [
+                    "Broth or sauce may need staff verification."
+                    if selected_set == {AllergyTag.FISH}
+                    else f"Preparation wording needs staff verification: {term_text}."
+                ],
                 "verification_question": (
                     f"Does the {term_text} used for {name} contain {selected_text}, or share preparation equipment?"
                 ),
@@ -150,24 +228,29 @@ def classify_menu_item(
 
 
 def classify_place_menu(menu: PlaceMenu, selected_allergens: list[AllergyTag]) -> PlaceMenu:
-    if not selected_allergens:
-        return menu
     return menu.model_copy(
         update={
             "sections": [
                 section.model_copy(
                     update={
                         "items": [
-                            classify_menu_item(
-                                item,
-                                selected_allergens,
-                                source_confidence=menu.extraction_confidence,
+                            (
+                                classify_menu_item(
+                                    item,
+                                    selected_allergens,
+                                    source_confidence=menu.extraction_confidence,
+                                    section_title=section.title,
+                                )
+                                if selected_allergens
+                                else item
                             )
                             for item in section.items
+                            if not is_non_food_category(item)
                         ]
                     }
                 )
                 for section in menu.sections
+                if any(not is_non_food_category(item) for item in section.items)
             ]
         }
     )

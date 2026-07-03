@@ -117,10 +117,15 @@ function getMenuVerification(
   }
 
   if (item.risk_label === "needs_check") {
+    const brothOrSauceCheck = item.risk_reasons?.some((reason) =>
+      reason.toLowerCase().includes("broth or sauce"),
+    );
     return {
       label: "Needs check",
       tone: "needs-check",
-      metadata: "preparation needs staff review",
+      metadata: brothOrSauceCheck
+        ? "broth/sauce may need staff verification"
+        : "preparation needs staff review",
       detail: detail || "Preparation or ingredient wording needs staff verification.",
     };
   }
@@ -167,6 +172,10 @@ export default function TrustPanel({
   const [tabState, setTabState] = useState<{ placeId: string | null; tab: PlaceTab }>({
     placeId: null,
     tab: "overview",
+  });
+  const [expandedMenuGroups, setExpandedMenuGroups] = useState<{ placeId: string | null; keys: string[] }>({
+    placeId: null,
+    keys: [],
   });
 
   if (!place) {
@@ -230,28 +239,28 @@ export default function TrustPanel({
       title: "Possible lower-risk items to ask about",
       tone: "possible",
       count: possibleMenuItems.length,
-      items: possibleMenuItems.slice(0, 5),
+      items: possibleMenuItems,
     },
     {
       key: "check",
       title: "Needs staff check",
       tone: "needs-check",
       count: needsCheckMenuItems.length,
-      items: needsCheckMenuItems.slice(0, 6),
+      items: needsCheckMenuItems,
     },
     {
       key: "avoid",
       title: "Avoid for your allergies",
       tone: "avoid",
       count: avoidMenuItems.length,
-      items: avoidMenuItems.slice(0, 6),
+      items: avoidMenuItems,
     },
     {
       key: "insufficient",
       title: "Insufficient info",
       tone: "unknown",
       count: insufficientMenuItems.length,
-      items: insufficientMenuItems.slice(0, 6),
+      items: insufficientMenuItems,
     },
   ];
   const menuBucketCounts = {
@@ -263,14 +272,15 @@ export default function TrustPanel({
   const restaurantFitScore = data.restaurant_fit_score ?? data.menu?.restaurant_fit_score ?? 20;
   const restaurantFitLabel =
     data.restaurant_fit_label ?? data.menu?.restaurant_fit_label ?? (menuItemCount > 0 ? "Needs verification" : "Scan needed");
+  const restaurantFitReason = data.restaurant_fit_reason ?? data.menu?.restaurant_fit_reason ?? null;
   const hasRestaurantFit = allergyMode && menuItemCount > 0 && restaurantFitScore != null;
   const restaurantFitTone = restaurantFitScore >= 70 ? "good" : restaurantFitScore >= 45 ? "caution" : "risk";
   const restaurantFitMessage =
-    menuBucketCounts.avoid > 0 && menuBucketCounts.possible > 0
+    restaurantFitReason ?? (menuBucketCounts.avoid > 0 && menuBucketCounts.possible > 0
       ? "Some dishes contain your allergens, but many menu items may be possible lower-risk after staff verification."
       : menuBucketCounts.possible > 0
         ? "Several menu items may be possible lower-risk after staff verification."
-        : "The current menu evidence still needs careful staff verification.";
+        : "The current menu evidence still needs careful staff verification.");
   const reviewSnippets = data.review_snippets ?? [];
   const reviewSource = data.review_source_summary;
   const reviewSignalCount = data.evidence.length;
@@ -446,6 +456,18 @@ export default function TrustPanel({
 
       {activeTab === "menu" && (
         <div className="place-tab-panel">
+          {hasRestaurantFit && (
+            <div className="menu-fit-summary" aria-label="Restaurant allergy fit summary">
+              <strong>
+                Restaurant allergy fit: {restaurantFitScore} · {restaurantFitLabel}
+              </strong>
+              <p>
+                {menuBucketCounts.possible} possible · {menuBucketCounts.check} check · {menuBucketCounts.avoid} avoid
+                {menuBucketCounts.insufficient > 0 ? ` · ${menuBucketCounts.insufficient} insufficient` : ""}
+              </p>
+              {restaurantFitReason && <small>{restaurantFitReason}</small>}
+            </div>
+          )}
           <div
             className="place-status-row menu-tab-status-row"
             title={allergyMode ? `Source confidence ${confidencePercent}%. Evidence fit ${data.score_summary.fit_score}/100.` : "Menu extraction status"}
@@ -454,21 +476,10 @@ export default function TrustPanel({
             <span className={menuItemCount > 0 ? "menu-found" : "menu-pending"}>
               {menuLifecycleLabel}
             </span>
-            {allergyMode && <span className="needs-verification">{restaurantFitLabel}</span>}
             {ragStatus && !menuLifecycleLabel.includes("RAG index ready") && <span className={ragStatus.className}>{ragStatus.label}</span>}
             {ocrStatus && <span className={ocrStatus.className}>{ocrStatus.label}</span>}
             {refreshFailed && menuItemCount > 0 && <span className="refresh-failed">Refresh failed</span>}
           </div>
-          {hasRestaurantFit && (
-            <div className="menu-fit-summary" aria-label="Restaurant allergy fit summary">
-              <strong>
-                Restaurant allergy fit: {restaurantFitScore} · {restaurantFitLabel}
-              </strong>
-              <p>
-                {menuBucketCounts.possible} possible lower-risk · {menuBucketCounts.check} needs check · {menuBucketCounts.avoid} avoid · {menuBucketCounts.insufficient} insufficient info
-              </p>
-            </div>
-          )}
           <div className="menu-source-row">
             <div>
               <strong>Menu</strong>
@@ -516,13 +527,17 @@ export default function TrustPanel({
             </div>
           ) : menuSections.length > 0 && allergyMode ? (
             <div className="menu-risk-groups">
-              {menuRiskGroups.filter((group) => group.items.length > 0).map((group) => (
-                <section key={group.key} className={`menu-risk-group ${group.tone}`}>
-                  <div className="menu-risk-group-header">
-                    <h3>{group.title}</h3>
-                    <span>{group.count}</span>
-                  </div>
-                  {group.items.map(({ item, sectionTitle, verification }) => {
+              {menuRiskGroups.filter((group) => group.items.length > 0).map((group) => {
+                const isExpanded =
+                  expandedMenuGroups.placeId === data.id && expandedMenuGroups.keys.includes(group.key);
+                const visibleItems = isExpanded ? group.items : group.items.slice(0, 5);
+                return (
+                  <section key={group.key} className={`menu-risk-group ${group.tone}`}>
+                    <div className="menu-risk-group-header">
+                      <h3>{group.title}</h3>
+                      <span>{group.count}</span>
+                    </div>
+                    {visibleItems.map(({ item, sectionTitle, verification }) => {
                     const tooltip = [item.description, verification.detail].filter(Boolean).join(" ");
                     return (
                       <article
@@ -541,15 +556,33 @@ export default function TrustPanel({
                             </span>
                           </div>
                           <p className={`menu-item-meta ${verification.tone}`}>
-                            {sectionTitle} · {verification.metadata}
+                            {verification.metadata}
                           </p>
                         </div>
                         {item.price && <span className="menu-price">{item.price}</span>}
                       </article>
                     );
-                  })}
-                </section>
-              ))}
+                    })}
+                    {group.items.length > 5 && (
+                      <button
+                        type="button"
+                        className="menu-group-toggle"
+                        onClick={() =>
+                          setExpandedMenuGroups((current) => {
+                            const keys = current.placeId === data.id ? current.keys : [];
+                            return {
+                              placeId: data.id,
+                              keys: isExpanded ? keys.filter((key) => key !== group.key) : [...keys, group.key],
+                            };
+                          })
+                        }
+                      >
+                        {isExpanded ? "Show less" : `Show ${group.items.length - 5} more`}
+                      </button>
+                    )}
+                  </section>
+                );
+              })}
             </div>
           ) : menuSections.length > 0 ? (
             <div className="menu-risk-groups general-menu-groups">

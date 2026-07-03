@@ -144,6 +144,7 @@ export interface PlaceMenu {
   general_match_score?: number | null;
   general_match_label?: string | null;
   restaurant_fit_label?: string | null;
+  restaurant_fit_reason?: string | null;
   avoid_count?: number;
   needs_check_count?: number;
   possible_lower_risk_count?: number;
@@ -299,6 +300,7 @@ export interface PlaceDetailsResponse extends PlaceSummary {
   score_summary: PlaceScoreSummary;
   restaurant_fit_score?: number | null;
   restaurant_fit_label?: string | null;
+  restaurant_fit_reason?: string | null;
   evidence: ReviewEvidence[];
   review_snippets: PlaceReviewSnippet[];
   review_source_summary?: ReviewSourceSummary;
@@ -344,6 +346,8 @@ export interface NearbyPlaceSuggestion {
   scan_priority_rank?: number | null;
   scan_priority_score?: number | null;
   restaurant_fit_score?: number | null;
+  general_match_score?: number | null;
+  general_match_label?: string | null;
   restaurant_fit_label:
     | "Better candidate, still verify"
     | "Good candidate to ask about"

@@ -38,7 +38,7 @@ def test_restaurant_score_rewards_possible_lower_risk_ratio() -> None:
         [AllergyTag.FISH],
     )
     mostly_checks = score_restaurant_menu(
-        menu_source([MenuItem(name="House Curry"), MenuItem(name="Chef Special")]),
+        menu_source([MenuItem(name="Kids Ramen"), MenuItem(name="House Broth")]),
         [AllergyTag.FISH],
     )
 
@@ -90,3 +90,46 @@ def test_short_but_specific_dishes_are_not_over_penalized() -> None:
     assert score.possible_lower_risk_count == 3
     assert score.insufficient_info_count == 0
     assert score.score >= 70
+
+
+def test_restaurant_score_excludes_non_food_category_rows() -> None:
+    score = score_restaurant_menu(
+        menu_source(
+            [
+                MenuItem(name="Dine-In Menu"),
+                MenuItem(name="Recommended Toppings Set"),
+                MenuItem(name="Soft Boiled Egg"),
+                MenuItem(name="Kids Ramen"),
+            ]
+        ),
+        [AllergyTag.FISH],
+    )
+
+    assert score.menu_item_count == 2
+    assert score.possible_lower_risk_count == 1
+    assert score.needs_check_count == 1
+    assert score.avoid_count == 0
+    assert score.score >= 60
+    assert "no menu items directly mention fish" in score.reason.lower()
+
+
+def test_ichiran_style_menu_scores_as_better_candidate_for_fish() -> None:
+    items = [
+        MenuItem(name="Soft Boiled Egg"),
+        MenuItem(name="White Rice"),
+        MenuItem(name="Matcha Pudding"),
+        MenuItem(name="Green Tea Pudding"),
+        MenuItem(name="Sliced Pork"),
+        MenuItem(name="Seasonal Vegetables"),
+        MenuItem(name="Classic Ramen"),
+        MenuItem(name="Kids Ramen"),
+        MenuItem(name="House Broth"),
+    ]
+
+    score = score_restaurant_menu(menu_source(items), [AllergyTag.FISH])
+
+    assert score.possible_lower_risk_count == 6
+    assert score.needs_check_count == 3
+    assert score.avoid_count == 0
+    assert 70 <= score.score <= 85
+    assert score.label == "Better candidate, still verify"

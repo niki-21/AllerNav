@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .menu_risk import classify_menu_item
+from .menu_risk import classify_menu_item, is_non_food_category
 from .models import AllergyTag, MenuSource
 
 
@@ -55,9 +55,15 @@ def score_restaurant_menu(
     if source_confidence is None:
         source_confidence = source.reliability
     classified = [
-        classify_menu_item(item, selected_allergens, source_confidence=source_confidence)
+        classify_menu_item(
+            item,
+            selected_allergens,
+            source_confidence=source_confidence,
+            section_title=section.title,
+        )
         for section in source.sections
         for item in section.items
+        if not is_non_food_category(item)
     ]
     item_count = len(classified)
     if item_count == 0:
@@ -89,16 +95,16 @@ def score_restaurant_menu(
     insufficient_ratio = counts["insufficient_info"] / item_count
     possible_ratio = counts["possible_lower_risk"] / item_count
     score = round(
-        45
+        50
         + 35 * possible_ratio
-        + 10 * quality_and_coverage
-        - 20 * avoid_ratio
-        - 6 * needs_check_ratio
-        - 8 * insufficient_ratio
+        + 5 * quality_and_coverage
+        - 25 * avoid_ratio
+        - 12 * needs_check_ratio
+        - 10 * insufficient_ratio
     )
     score = max(0, min(100, score))
 
-    if score >= 75:
+    if score >= 70:
         label = "Better candidate, still verify"
     elif score >= 55:
         label = "Good candidate to ask about"
@@ -107,7 +113,17 @@ def score_restaurant_menu(
     else:
         label = "Limited fit / scan needed"
 
-    if counts["avoid"]:
+    if (
+        set(selected_allergens) == {AllergyTag.FISH}
+        and not counts["avoid"]
+        and counts["needs_check"]
+    ):
+        reason = (
+            "High score because no menu items directly mention fish, but ramen broth and sauces need staff verification."
+            if score >= 70
+            else "No menu items directly mention fish, but ramen broth and sauces need staff verification."
+        )
+    elif counts["avoid"]:
         reason = (
             f"{counts['avoid']} item{'s' if counts['avoid'] != 1 else ''} match selected allergens; "
             f"{counts['possible_lower_risk']} possible lower-risk item"

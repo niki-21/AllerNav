@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from allernav_api.menu_risk import classify_menu_item
-from allernav_api.models import AllergyTag, MenuItem
+from allernav_api.menu_risk import classify_menu_item, classify_place_menu, is_non_food_category
+from allernav_api.models import AllergyTag, MenuItem, MenuSection, PlaceMenu
 
 
 def test_sesame_naan_is_avoid_for_sesame() -> None:
@@ -89,3 +89,50 @@ def test_arabic_ocr_evidence_maps_to_english_allergen_summary() -> None:
     assert result.matched_allergens == [AllergyTag.SESAME]
     assert "sesame" in result.risk_reasons[0].lower()
     assert "سمسم" in f"{result.name} {result.description}"
+
+
+def test_menu_headers_are_non_food_categories_and_removed() -> None:
+    dine_in = MenuItem(name="Dine-In Menu")
+    toppings = MenuItem(name="Recommended Toppings Set")
+
+    assert is_non_food_category(dine_in)
+    assert is_non_food_category(toppings)
+
+    menu = classify_place_menu(
+        PlaceMenu(
+            sections=[
+                MenuSection(
+                    title="Menu",
+                    items=[dine_in, toppings, MenuItem(name="Soft Boiled Egg")],
+                )
+            ]
+        ),
+        [AllergyTag.FISH],
+    )
+    assert [item.name for item in menu.sections[0].items] == ["Soft Boiled Egg"]
+
+
+def test_kids_ramen_needs_check_for_fish_broth_context() -> None:
+    result = classify_menu_item(MenuItem(name="Kids Ramen"), [AllergyTag.FISH])
+    assert result.risk_label == "needs_check"
+    assert "broth or sauce" in result.risk_reasons[0].lower()
+
+
+def test_simple_sides_and_desserts_are_possible_lower_risk_for_fish() -> None:
+    for name in ("Soft Boiled Egg", "Matcha Pudding"):
+        result = classify_menu_item(MenuItem(name=name), [AllergyTag.FISH])
+        assert result.risk_label == "possible_lower_risk"
+
+
+def test_bonito_broth_is_avoid_for_fish() -> None:
+    result = classify_menu_item(MenuItem(name="Bonito Broth"), [AllergyTag.FISH])
+    assert result.risk_label == "avoid"
+    assert result.matched_allergens == [AllergyTag.FISH]
+
+
+def test_dessert_sauce_is_not_automatically_a_fish_check() -> None:
+    result = classify_menu_item(
+        MenuItem(name="Matcha Pudding", description="Served with a sweet caramel sauce"),
+        [AllergyTag.FISH],
+    )
+    assert result.risk_label == "possible_lower_risk"

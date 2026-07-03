@@ -479,8 +479,11 @@ textarea {
 .menu-fit-summary {
   display: grid;
   gap: 4px;
-  padding: 2px 0 12px;
-  border-bottom: 1px solid rgba(60, 64, 67, 0.12);
+  padding: 12px 14px;
+  border: 1px solid rgba(60, 64, 67, 0.14);
+  border-left: 4px solid #5f8f76;
+  border-radius: 8px;
+  background: #fbfdfc;
 }
 
 .menu-fit-summary strong {
@@ -493,6 +496,12 @@ textarea {
   margin: 0;
   color: #5f6368;
   font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.menu-fit-summary small {
+  color: #5f6368;
+  font-size: 0.78rem;
   line-height: 1.4;
 }
 
@@ -1905,13 +1914,18 @@ body {
 
 .menu-risk-groups {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .menu-risk-group {
   display: grid;
   gap: 0;
   border-top: 3px solid #c7c9cc;
+  border-right: 1px solid rgba(60, 64, 67, 0.1);
+  border-bottom: 1px solid rgba(60, 64, 67, 0.1);
+  border-left: 1px solid rgba(60, 64, 67, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .menu-risk-group.avoid {
@@ -2189,6 +2203,21 @@ body {
 
 .compact-menu-row {
   cursor: help;
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.menu-group-toggle {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-top: 1px solid rgba(60, 64, 67, 0.1);
+  background: #ffffff;
+  color: #146cdb;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
 }
 
 .menu-list-item .menu-price {

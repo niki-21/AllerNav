@@ -148,6 +148,7 @@ class PlaceDetailsResponse(BaseModel):
     score_summary: PlaceScoreSummary
     restaurant_fit_score: int | None = Field(default=None, ge=0, le=100)
     restaurant_fit_label: str | None = None
+    restaurant_fit_reason: str | None = None
     evidence: list[ReviewEvidence]
     review_snippets: list["PlaceReviewSnippet"] = Field(default_factory=list)
     review_source_summary: "ReviewSourceSummary | None" = None
@@ -196,6 +197,7 @@ class PlaceMenu(BaseModel):
     extraction_confidence: float | None = Field(default=None, ge=0, le=1)
     restaurant_fit_score: int | None = Field(default=None, ge=0, le=100)
     restaurant_fit_label: str | None = None
+    restaurant_fit_reason: str | None = None
     avoid_count: int = Field(default=0, ge=0)
     needs_check_count: int = Field(default=0, ge=0)
     possible_lower_risk_count: int = Field(default=0, ge=0)

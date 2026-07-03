@@ -104,6 +104,8 @@ async def get_place_details_service(
     summary, evidence, explanation = analyze_place(place, selected_allergens)
     menu_source = load_menu_source(place["id"])
     menu = load_place_menu(place["id"]) if menu_source else None
+    if menu:
+        menu = classify_place_menu(menu, selected_allergens)
     restaurant_fit = score_restaurant_menu(menu_source, selected_allergens) if selected_allergens else None
     if menu and restaurant_fit:
         menu = menu.model_copy(update=restaurant_fit_menu_fields(restaurant_fit))
@@ -158,6 +160,7 @@ async def get_place_details_service(
         score_summary=summary,
         restaurant_fit_score=restaurant_fit.score if restaurant_fit else None,
         restaurant_fit_label=restaurant_fit.label if restaurant_fit else None,
+        restaurant_fit_reason=restaurant_fit.reason if restaurant_fit else None,
         evidence=evidence,
         review_snippets=[
             {
@@ -203,6 +206,7 @@ def restaurant_fit_menu_fields(fit: RestaurantFitScore) -> dict[str, object]:
     return {
         "restaurant_fit_score": fit.score,
         "restaurant_fit_label": fit.label,
+        "restaurant_fit_reason": fit.reason,
         "avoid_count": fit.avoid_count,
         "needs_check_count": fit.needs_check_count,
         "possible_lower_risk_count": fit.possible_lower_risk_count,
