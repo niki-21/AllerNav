@@ -684,8 +684,9 @@ class ApiTests(unittest.TestCase):
         self.assertGreaterEqual(len(response.evidence), 1)
         self.assertEqual(
             response.answer,
-            f"Only one candidate was available. Alpha Cafe scores {response.places[0].restaurant_fit_score}/100 "
-            "with 1 avoid item and 1 possible lower-risk option. Search this area to compare more restaurants.",
+            f"Best current option: Alpha Cafe scores {response.places[0].restaurant_fit_score}. "
+            "I found 1 item to ask about and 1 direct allergen match. "
+            "Search this area to compare more restaurants.",
         )
         self.assertEqual(response.places[0].evidence_status, "scanned")
         self.assertGreater(response.places[0].restaurant_fit_score, 20)
@@ -779,7 +780,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual({place.place.id for place in response.places}, {"alpha", "bravo", "charlie"})
         scanned = [place for place in response.places if place.evidence_status == "scanned"]
         self.assertEqual(len(scanned), 2)
-        self.assertIn("I found 3 nearby restaurants. 2 have scanned menu evidence.", response.answer)
+        self.assertIn("Best current option:", response.answer)
+        self.assertIn("1 nearby place still needs menu scans.", response.answer)
         self.assertTrue(all(place.evidence_count == 1 for place in scanned))
         self.assertEqual(response.scan_needed_places[0].id, "charlie")
         self.assertTrue(all(place.reason for place in response.places))
@@ -998,7 +1000,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.scan_needed_places, [])
         self.assertEqual(
             response.answer,
-            "No allergies selected. I found 2 nearby restaurants and ranked them by rating, popularity, and distance.",
+            "No allergies selected. I found 2 nearby restaurants and ranked them by rating, popularity, distance, and search intent.",
         )
 
 if __name__ == "__main__":

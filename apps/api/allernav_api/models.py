@@ -202,6 +202,8 @@ class PlaceMenu(BaseModel):
     needs_check_count: int = Field(default=0, ge=0)
     possible_lower_risk_count: int = Field(default=0, ge=0)
     insufficient_info_count: int = Field(default=0, ge=0)
+    possible_item_names: list[str] = Field(default_factory=list)
+    avoid_item_names: list[str] = Field(default_factory=list)
     sections: list[MenuSection] = Field(default_factory=list)
 
 
@@ -378,18 +380,27 @@ class NearbyPlaceSuggestion(BaseModel):
     general_match_score: float | None = Field(default=None, ge=0, le=100)
     general_match_label: str | None = None
     restaurant_fit_label: Literal[
+        "Strong candidate, still verify",
         "Better candidate, still verify",
+        "Some options, needs verification",
+        "Limited options",
+        "High concern",
+        "Menu scan needed",
         "Good candidate to ask about",
         "Needs verification",
         "Scan needed",
         "Limited fit / scan needed",
     ] = "Scan needed"
+    intent_match: bool | None = None
+    intent_note: str | None = None
     menu_item_count: int = Field(default=0, ge=0)
     matched_allergen_items: int = Field(default=0, ge=0)
     avoid_count: int = Field(default=0, ge=0)
     needs_check_count: int = Field(default=0, ge=0)
     possible_lower_risk_count: int = Field(default=0, ge=0)
     insufficient_info_count: int = Field(default=0, ge=0)
+    possible_item_names: list[str] = Field(default_factory=list)
+    avoid_item_names: list[str] = Field(default_factory=list)
     evidence_quality: float = Field(default=0, ge=0, le=1)
     evidence_count: int = Field(default=0, ge=0)
     evidence: list[HybridSearchResult] = Field(default_factory=list)
@@ -409,6 +420,7 @@ class NearbySuggestionResponse(BaseModel):
     scan_needed_places: list[PlaceListItem] = Field(default_factory=list)
     top_scan_candidates: list[PlaceListItem] = Field(default_factory=list)
     scan_job_ids: list[str] = Field(default_factory=list)
+    search_intent: str | None = None
 
 
 class RecommendedMenuItem(BaseModel):

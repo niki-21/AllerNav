@@ -53,10 +53,10 @@ def test_unknown_curry_requires_staff_check() -> None:
     assert result.risk_label == "needs_check"
 
 
-def test_seafood_salad_is_avoid_for_fish() -> None:
+def test_seafood_salad_needs_check_for_fish() -> None:
     result = classify_menu_item(MenuItem(name="Seafood Salad"), [AllergyTag.FISH])
-    assert result.risk_label == "avoid"
-    assert result.matched_allergens == [AllergyTag.FISH]
+    assert result.risk_label == "needs_check"
+    assert result.matched_allergens == []
 
 
 def test_pasta_with_tomato_sauce_is_not_insufficient_info() -> None:
@@ -115,7 +115,7 @@ def test_menu_headers_are_non_food_categories_and_removed() -> None:
 def test_kids_ramen_needs_check_for_fish_broth_context() -> None:
     result = classify_menu_item(MenuItem(name="Kids Ramen"), [AllergyTag.FISH])
     assert result.risk_label == "needs_check"
-    assert "broth or sauce" in result.risk_reasons[0].lower()
+    assert "broth" in result.risk_reasons[0].lower()
 
 
 def test_simple_sides_and_desserts_are_possible_lower_risk_for_fish() -> None:
@@ -136,3 +136,11 @@ def test_dessert_sauce_is_not_automatically_a_fish_check() -> None:
         [AllergyTag.FISH],
     )
     assert result.risk_label == "possible_lower_risk"
+
+
+def test_ramen_broth_is_check_but_dashi_broth_is_avoid_for_fish() -> None:
+    ramen = classify_menu_item(MenuItem(name="Ramen Broth"), [AllergyTag.FISH])
+    dashi = classify_menu_item(MenuItem(name="Dashi Ramen Broth"), [AllergyTag.FISH])
+
+    assert ramen.risk_label == "needs_check"
+    assert dashi.risk_label == "avoid"

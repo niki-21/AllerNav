@@ -25,6 +25,7 @@ import {
 } from "@/lib/api";
 import { rankPlaces, shouldShowSearchAreaButton } from "@/lib/placeRanking";
 import { applyPlaceDetailError, applyPlaceDetailSuccess, seedPlaceDetailsState } from "@/lib/placeState";
+import { extractSearchIntent } from "@/lib/searchIntent";
 import type {
   AllergyTag,
   AskRestaurantResponse,
@@ -63,9 +64,9 @@ function candidateName(name?: string | null): string {
 
 function nearbyBucketSummary(suggestion: NearbySuggestionResponse["places"][number]): string {
   return [
+    `${suggestion.possible_lower_risk_count} good option${suggestion.possible_lower_risk_count === 1 ? "" : "s"}`,
     `${suggestion.avoid_count} avoid`,
-    `${suggestion.needs_check_count} needs check`,
-    `${suggestion.possible_lower_risk_count} possible lower-risk`,
+    `${suggestion.needs_check_count} check`,
   ].join(" · ");
 }
 
@@ -78,22 +79,11 @@ function hasScannedMenuEvidence(suggestion: NearbySuggestionResponse["places"][n
 }
 
 function nearbyAnswerSummary(answer: NearbySuggestionResponse): string {
-  if (answer.ranking_mode === "general_discovery") {
-    return answer.answer;
-  }
   const runningCount = answer.places.filter((suggestion) => suggestion.evidence_status === "scan_running").length;
   if (runningCount > 0) {
     return `Scanning menus for ${runningCount} restaurant${runningCount === 1 ? "" : "s"}…`;
   }
-  const scannedCount = answer.places.filter(hasScannedMenuEvidence).length;
-  if (scannedCount === 0) {
-    const candidateCount = Math.max(answer.places.length, scannedCount + answer.scan_needed_places.length);
-    return `I found ${candidateCount} nearby restaurant${candidateCount === 1 ? "" : "s"}. I can compare allergy fit after menu scans.`;
-  }
-  const remainingCount = answer.places.filter((suggestion) => suggestion.evidence_status === "scan_needed").length;
-  return remainingCount > 0
-    ? `I can compare ${scannedCount} restaurant${scannedCount === 1 ? "" : "s"} from scanned menu evidence. ${remainingCount} more need menu scans.`
-    : `I compared ${scannedCount} nearby restaurant${scannedCount === 1 ? "" : "s"} using scanned menu evidence.`;
+  return answer.answer;
 }
 
 function menuIsStale(menu: PlaceMenu | null | undefined): boolean {
@@ -594,9 +584,14 @@ export default function Home() {
     if (!question) {
       return;
     }
+    const intentQuery = extractSearchIntent(question, query);
+    const intentChanged = intentQuery.toLowerCase() !== (query.trim() || "restaurants").toLowerCase();
     let visiblePlaces = rankedPlaces;
-    if (!areaSearchCompleted || canSearchArea || visiblePlaces.length === 0) {
-      visiblePlaces = await runSearch(query.trim() || "restaurants", mapCenter, selectedAllergens);
+    if (!areaSearchCompleted || canSearchArea || visiblePlaces.length === 0 || intentChanged) {
+      if (intentChanged) {
+        setQuery(intentQuery);
+      }
+      visiblePlaces = await runSearch(intentQuery, mapCenter, selectedAllergens);
       if (visiblePlaces.length === 0) {
         setNearbyAskState("error");
         setNearbyAskError("No restaurants were found in this area. Try moving the map or changing the search.");
@@ -641,6 +636,7 @@ export default function Home() {
         selectedAllergens,
         candidatePlaces,
         allowBackgroundScan,
+        intentQuery,
       );
       if (requestId !== nearbyRequestSequence.current) {
         return;
@@ -709,6 +705,7 @@ export default function Home() {
                 selectedAllergens,
                 candidatePlaces,
                 false,
+                intentQuery,
               );
               if (requestId !== nearbyRequestSequence.current) {
                 return;
@@ -740,6 +737,7 @@ export default function Home() {
                 selectedAllergens,
                 candidatePlaces,
                 false,
+                intentQuery,
               );
               if (requestId !== nearbyRequestSequence.current) {
                 return;
@@ -876,6 +874,8 @@ export default function Home() {
                     {nearbyAnswer.places.slice(0, 3).map((suggestion) => {
                       const generalMode = nearbyAnswer.ranking_mode === "general_discovery";
                       const showScore = !generalMode && hasScannedMenuEvidence(suggestion);
+                      const possibleItemNames = suggestion.possible_item_names ?? [];
+                      const avoidItemNames = suggestion.avoid_item_names ?? [];
                       const scoreTone = showScore
                         ? suggestion.restaurant_fit_score! >= 70
                           ? "good"
@@ -909,7 +909,25 @@ export default function Home() {
                             </b>
                           </span>
                           {showScore && <small>{nearbyBucketSummary(suggestion)}</small>}
-                          {showScore && <small className="nearby-rag-next">Next: {suggestion.next_action}</small>}
+                          {showScore && (
+                            <span className="nearby-rag-menu-preview">
+                              <small>
+                                <b>Good to ask about:</b>{" "}
+                                {possibleItemNames.length > 0
+                                  ? possibleItemNames.join(", ")
+                                  : "No clear options found yet"}
+                              </small>
+                              <small>
+                                <b>Avoid found:</b>{" "}
+                                {avoidItemNames.length > 0
+                                  ? avoidItemNames.join(", ")
+                                  : "none"}
+                              </small>
+                            </span>
+                          )}
+                          {suggestion.intent_match === false && suggestion.intent_note && (
+                            <small className="nearby-intent-mismatch">{suggestion.intent_note}</small>
+                          )}
                           {generalMode && <small>{suggestion.reason}</small>}
                         </button>
                       );
@@ -927,10 +945,25 @@ export default function Home() {
                     {nearbyAskState === "loading" ? "Starting scans..." : "Scan top places"}
                   </button>
                 )}
-                <details className="nearby-rag-details">
-                  <summary>Technical trace</summary>
-                  <small>{nearbyRetrievalLabel(nearbyAnswer.retrieval_mode)}</small>
-                  {nearbyAnswer.evidence.length > 0 && (
+                {nearbyAnswer.ranking_mode === "allergy_fit" &&
+                  nearbyAnswer.places.some(hasScannedMenuEvidence) && (
+                    <p className="nearby-rag-next-action">
+                      Ask staff about sauces, broths, and shared prep before ordering.
+                    </p>
+                  )}
+                {nearbyAnswer.recommended_questions.length > 0 && (
+                  <details className="nearby-rag-details">
+                    <summary>Staff questions</summary>
+                    <ul>
+                      {nearbyAnswer.recommended_questions.slice(0, 3).map((question) => (
+                        <li key={question}>{question}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {nearbyAnswer.evidence.length > 0 && (
+                  <details className="nearby-rag-details">
+                    <summary>Evidence details</summary>
                     <div className="nearby-rag-citations">
                       {nearbyAnswer.evidence.slice(0, 3).map((item, index) => (
                         <article key={item.id} className="nearby-rag-citation">
@@ -939,7 +972,11 @@ export default function Home() {
                         </article>
                       ))}
                     </div>
-                  )}
+                  </details>
+                )}
+                <details className="nearby-rag-details">
+                  <summary>Technical trace</summary>
+                  <small>{nearbyRetrievalLabel(nearbyAnswer.retrieval_mode)}</small>
                 </details>
               </div>
             )}

@@ -9,6 +9,7 @@ from typing import Any
 from urllib import error, request
 
 from .azure_search import hybrid_search_menu
+from .apify_reviews import load_cached_reviews
 from .langchain_tracing import (
     ainvoke_traced_runnable,
     invoke_traced_runnable,
@@ -27,7 +28,25 @@ from .models import (
     NearbySuggestionResponse,
     PlaceListItem,
 )
-from .restaurant_scoring import score_restaurant_menu
+from .restaurant_scoring import has_confirmed_allergen_risk_review, score_restaurant_menu
+
+
+INTENT_TERMS: dict[str, tuple[str, ...]] = {
+    "french": ("french", "bistro", "brasserie", "patisserie"),
+    "italian": ("italian", "pizzeria", "trattoria", "osteria"),
+    "thai": ("thai",),
+    "indian": ("indian",),
+    "chinese": ("chinese", "dim sum"),
+    "japanese": ("japanese", "ramen", "sushi", "izakaya"),
+    "korean": ("korean",),
+    "mexican": ("mexican", "taqueria", "taco"),
+    "mediterranean": ("mediterranean",),
+    "middle eastern": ("middle eastern", "lebanese", "persian"),
+    "burger": ("burger",),
+    "cafe": ("cafe", "cafes", "coffee", "coffee shop", "bakery"),
+    "vegan": ("vegan",),
+    "vegetarian": ("vegetarian",),
+}
 
 try:
     from langsmith import traceable
@@ -70,7 +89,7 @@ async def suggest_nearby_places_service(
     missing_information = build_missing_information(suggestions)
     questions = build_recommended_questions(payload.allergens)
     top_scan_candidates = scan_needed[:3]
-    answer = build_nearby_summary(len(candidates), scanned, scan_needed, top_scan_candidates)
+    answer = build_nearby_summary(payload, len(candidates), scanned, scan_needed, top_scan_candidates)
     retrieval_mode = "hybrid_keyword_semantic" if scanned else "scanned_menu_evidence_needed"
     trace_nearby_result(payload, suggestions, retrieval_mode, top_scan_candidates)
     scan_job_ids = [item.scan_job_id for item in suggestions if item.scan_job_id]
@@ -86,6 +105,7 @@ async def suggest_nearby_places_service(
         scan_needed_places=[suggestion.place for suggestion in scan_needed],
         top_scan_candidates=[suggestion.place for suggestion in top_scan_candidates],
         scan_job_ids=scan_job_ids,
+        search_intent=payload.query,
     )
 
 
@@ -93,8 +113,11 @@ def build_general_nearby_response(
     payload: NearbySuggestionRequest,
     candidates: list[PlaceListItem],
 ) -> NearbySuggestionResponse:
-    suggestions = [build_general_place_suggestion(place, payload.center) for place in candidates]
-    suggestions.sort(key=lambda item: item.general_match_score or 0, reverse=True)
+    suggestions = [build_general_place_suggestion(place, payload.center, payload.query) for place in candidates]
+    suggestions.sort(
+        key=lambda item: (item.intent_match is not False, item.general_match_score or 0),
+        reverse=True,
+    )
     update_current_trace_metadata(
         candidate_count=len(candidates),
         scanned_candidate_count=sum(item.menu_item_count > 0 for item in suggestions),
@@ -108,12 +131,7 @@ def build_general_nearby_response(
         ranking_mode="general_discovery",
     )
     return NearbySuggestionResponse(
-        answer=(
-            f"No allergies selected. I found {len(candidates)} nearby restaurant"
-            f"{'s' if len(candidates) != 1 else ''} and ranked them by rating, popularity, and distance."
-            if candidates
-            else "No allergies selected. I could not find restaurants in the current map area."
-        ),
+        answer=build_general_summary(payload, suggestions),
         retrieval_mode="general_discovery",
         ranking_mode="general_discovery",
         places=suggestions,
@@ -123,14 +141,38 @@ def build_general_nearby_response(
         scan_needed_places=[],
         top_scan_candidates=[],
         scan_job_ids=[],
+        search_intent=payload.query,
     )
 
 
-def build_general_place_suggestion(place: PlaceListItem, center: LatLng | None) -> NearbyPlaceSuggestion:
+def build_general_summary(
+    payload: NearbySuggestionRequest,
+    suggestions: list[NearbyPlaceSuggestion],
+) -> str:
+    if not suggestions:
+        return "No allergies selected. I could not find restaurants in the current map area."
+    label, _aliases = requested_intent(payload.query)
+    if label and not any(item.intent_match for item in suggestions):
+        return (
+            f"No allergies selected. I found restaurants nearby, but they do not strongly match {label}. "
+            f"Try searching this area again with {payload.query}."
+        )
+    return (
+        f"No allergies selected. I found {len(suggestions)} nearby restaurant"
+        f"{'s' if len(suggestions) != 1 else ''} and ranked them by rating, popularity, distance, and search intent."
+    )
+
+
+def build_general_place_suggestion(
+    place: PlaceListItem,
+    center: LatLng | None,
+    query: str = "restaurants",
+) -> NearbyPlaceSuggestion:
     source = load_menu_source(place.id)
     menu_item_count = sum(len(section.items) for section in source.sections) if source else 0
     score = general_discovery_score(place, center, menu_item_count > 0)
     label = general_discovery_label(place)
+    intent_match, intent_note = candidate_intent_match(place, query)
     return NearbyPlaceSuggestion(
         place=place.model_copy(update={"name": display_place_name(place.name)}),
         confidence=round(score / 100, 2),
@@ -149,6 +191,8 @@ def build_general_place_suggestion(place: PlaceListItem, center: LatLng | None) 
             else "Ranked by distance and restaurant relevance; Google rating is unavailable."
         ),
         next_action="Open the restaurant details or menu to explore this option.",
+        intent_match=intent_match,
+        intent_note=intent_note,
     )
 
 
@@ -176,7 +220,21 @@ def build_place_suggestion(
     source: MenuSource | None,
 ) -> NearbyPlaceSuggestion:
     place = place.model_copy(update={"name": display_place_name(place.name)})
-    fit = score_restaurant_menu(source, payload.allergens)
+    intent_match, intent_note = candidate_intent_match(place, payload.query)
+    try:
+        cached_reviews = load_cached_reviews(place.id)
+    except Exception:  # Review storage should not prevent menu-based ranking.
+        cached_reviews = []
+    confirmed_review_risk = has_confirmed_allergen_risk_review(
+        [review.text for review in cached_reviews],
+        payload.allergens,
+    )
+    fit = score_restaurant_menu(
+        source,
+        payload.allergens,
+        confirmed_allergen_review=confirmed_review_risk,
+        restaurant_context=f"{place.name} {place.primary_type or ''}",
+    )
 
     evidence: list[HybridSearchResult] = []
     if source and fit.menu_item_count > 0:
@@ -208,6 +266,8 @@ def build_place_suggestion(
         needs_check_count=fit.needs_check_count,
         possible_lower_risk_count=fit.possible_lower_risk_count,
         insufficient_info_count=fit.insufficient_info_count,
+        possible_item_names=list(fit.possible_item_names),
+        avoid_item_names=list(fit.avoid_item_names),
         evidence_quality=fit.evidence_quality,
         retrieval_mode=(evidence[0].retrieval_mode if evidence else "hybrid_no_results"),
         allergens=[allergen.value for allergen in payload.allergens],
@@ -230,13 +290,37 @@ def build_place_suggestion(
         risk_note=fit.reason,
         reason=fit.reason,
         next_action=fit.next_action,
+        intent_match=intent_match,
+        intent_note=intent_note,
     )
 
 
-def suggestion_rank_key(suggestion: NearbyPlaceSuggestion) -> tuple[int, float]:
+def suggestion_rank_key(suggestion: NearbyPlaceSuggestion) -> tuple[int, int, float]:
+    intent_rank = 1 if suggestion.intent_match is not False else 0
     if suggestion.evidence_status == "scanned":
-        return (2, suggestion.restaurant_fit_score or 0)
-    return (1, suggestion.scan_priority_score or 0)
+        return (intent_rank, 2, suggestion.restaurant_fit_score or 0)
+    return (intent_rank, 1, suggestion.scan_priority_score or 0)
+
+
+def requested_intent(query: str) -> tuple[str | None, tuple[str, ...]]:
+    normalized = query.lower().replace("_", " ")
+    for label, aliases in INTENT_TERMS.items():
+        if any(re.search(rf"\b{re.escape(alias)}\b", normalized) for alias in aliases):
+            return label, aliases
+    return None, ()
+
+
+def candidate_intent_match(place: PlaceListItem, query: str) -> tuple[bool | None, str | None]:
+    label, aliases = requested_intent(query)
+    if not label:
+        return None, None
+    haystack = f"{place.name} {place.primary_type or ''}".lower().replace("_", " ")
+    matched = any(re.search(rf"\b{re.escape(alias)}\b", haystack) for alias in aliases)
+    return matched, (
+        f"Matches the requested {label} intent."
+        if matched
+        else f"Does not clearly match the requested {label} intent."
+    )
 
 
 def assign_scan_priorities(
@@ -248,7 +332,7 @@ def assign_scan_priorities(
         for item in suggestions
         if item.evidence_status != "scanned"
     ]
-    scored.sort(key=lambda entry: entry[1], reverse=True)
+    scored.sort(key=lambda entry: (entry[0].intent_match is not False, entry[1]), reverse=True)
     priorities = {
         item.place.id: (rank, score)
         for rank, (item, score) in enumerate(scored, start=1)
@@ -351,6 +435,7 @@ def apply_scan_job(suggestion: NearbyPlaceSuggestion, job: Any | None) -> Nearby
 
 
 def build_nearby_summary(
+    payload: NearbySuggestionRequest,
     candidate_count: int,
     scanned: list[NearbyPlaceSuggestion],
     scan_needed: list[NearbyPlaceSuggestion],
@@ -358,12 +443,36 @@ def build_nearby_summary(
 ) -> str:
     if candidate_count == 0:
         return "I could not find nearby candidates in the current map area."
+    intent_label, _aliases = requested_intent(payload.query)
+    all_suggestions = scanned + scan_needed
+    if intent_label and all_suggestions and not any(item.intent_match for item in all_suggestions):
+        return (
+            f"I found restaurants nearby, but they do not strongly match {intent_label}. "
+            f"Try searching this area again with {payload.query}."
+        )
+    if intent_label:
+        matching_scanned = [item for item in scanned if item.intent_match]
+        matching_scan_needed = [item for item in scan_needed if item.intent_match]
+        if matching_scanned:
+            scanned = matching_scanned
+        elif matching_scan_needed:
+            running = [item.place.name for item in matching_scan_needed if item.evidence_status == "scan_running"]
+            if running:
+                return (
+                    f"I found {len(matching_scan_needed)} {intent_label} candidate"
+                    f"{'s' if len(matching_scan_needed) != 1 else ''}. Menu scans are running for "
+                    f"{format_names(running)} before allergy comparison."
+                )
+            return (
+                f"I found {len(matching_scan_needed)} {intent_label} candidate"
+                f"{'s' if len(matching_scan_needed) != 1 else ''}, but they need menu scans before allergy comparison."
+            )
     if candidate_count == 1:
         only = scanned[0] if scanned else scan_needed[0]
         if only.evidence_status == "scanned":
             return (
-                f"Only one candidate was available. {only.place.name} scores {only.restaurant_fit_score}/100 "
-                f"with {bucket_reason(only)}. Search this area to compare more restaurants."
+                f"Best current option: {only.place.name} scores {only.restaurant_fit_score}. "
+                f"I found {bucket_reason(only)}. Search this area to compare more restaurants."
             )
         return f"Only one candidate was available. Start by scanning {only.place.name} before allergy comparison."
 
@@ -383,10 +492,15 @@ def build_nearby_summary(
 
     top = scanned[0]
     remaining = candidate_count - len(scanned)
-    scan_sentence = f" Scan the remaining {remaining} places to compare." if remaining else ""
+    scan_sentence = (
+        f" {remaining} nearby place{'s' if remaining != 1 else ''} still "
+        f"{'need' if remaining != 1 else 'needs'} menu scans."
+        if remaining
+        else ""
+    )
     return (
-        f"I found {candidate_count} nearby {place_word}. {len(scanned)} have scanned menu evidence. "
-        f"{top.place.name} scores {top.restaurant_fit_score}/100 because it has {bucket_reason(top)}."
+        f"Best current option: {top.place.name} scores {top.restaurant_fit_score}. "
+        f"I found {bucket_reason(top)}."
         f"{scan_sentence}"
     )
 
@@ -399,12 +513,13 @@ def display_place_name(name: str | None) -> str:
 
 
 def bucket_reason(suggestion: NearbyPlaceSuggestion) -> str:
-    avoid = f"{suggestion.avoid_count} avoid item{'s' if suggestion.avoid_count != 1 else ''}"
     possible = (
-        f"{suggestion.possible_lower_risk_count} possible lower-risk option"
-        f"{'s' if suggestion.possible_lower_risk_count != 1 else ''}"
+        f"{suggestion.possible_lower_risk_count} item"
+        f"{'s' if suggestion.possible_lower_risk_count != 1 else ''} to ask about"
     )
-    return f"{avoid} and {possible}"
+    if suggestion.avoid_count:
+        return f"{possible} and {suggestion.avoid_count} direct allergen match{'es' if suggestion.avoid_count != 1 else ''}"
+    return f"{possible} and no direct selected-allergen matches"
 
 
 def format_names(names: list[str]) -> str:
@@ -442,6 +557,8 @@ def trace_nearby_result(
         top_scan_priority_score=top.scan_priority_score if top and not scanned else None,
         flow_stage=flow_stage,
         selected_allergens=[allergen.value for allergen in payload.allergens],
+        search_intent=payload.query,
+        intent_match=top.intent_match if top else None,
         top_ranked_place=top.place.name if top else None,
         restaurant_fit_score=top.restaurant_fit_score if top else None,
         restaurant_fit_label=top.restaurant_fit_label if top else None,

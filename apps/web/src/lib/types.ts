@@ -149,6 +149,8 @@ export interface PlaceMenu {
   needs_check_count?: number;
   possible_lower_risk_count?: number;
   insufficient_info_count?: number;
+  possible_item_names?: string[];
+  avoid_item_names?: string[];
   sections: MenuSection[];
 }
 
@@ -349,17 +351,26 @@ export interface NearbyPlaceSuggestion {
   general_match_score?: number | null;
   general_match_label?: string | null;
   restaurant_fit_label:
+    | "Strong candidate, still verify"
     | "Better candidate, still verify"
+    | "Some options, needs verification"
+    | "Limited options"
+    | "High concern"
+    | "Menu scan needed"
     | "Good candidate to ask about"
     | "Needs verification"
     | "Scan needed"
     | "Limited fit / scan needed";
+  intent_match?: boolean | null;
+  intent_note?: string | null;
   menu_item_count: number;
   matched_allergen_items: number;
   avoid_count: number;
   needs_check_count: number;
   possible_lower_risk_count: number;
   insufficient_info_count: number;
+  possible_item_names?: string[];
+  avoid_item_names?: string[];
   evidence_quality: number;
   evidence_count: number;
   evidence: HybridSearchResult[];
@@ -379,6 +390,7 @@ export interface NearbySuggestionResponse {
   scan_needed_places: PlaceSummary[];
   top_scan_candidates: PlaceSummary[];
   scan_job_ids: string[];
+  search_intent?: string | null;
 }
 
 export type PlaceDetailState =

@@ -118,13 +118,13 @@ function getMenuVerification(
 
   if (item.risk_label === "needs_check") {
     const brothOrSauceCheck = item.risk_reasons?.some((reason) =>
-      reason.toLowerCase().includes("broth or sauce"),
+      reason.toLowerCase().includes("broth") || reason.toLowerCase().includes("seafood"),
     );
     return {
       label: "Needs check",
       tone: "needs-check",
       metadata: brothOrSauceCheck
-        ? "broth/sauce may need staff verification"
+        ? "seafood/broth/sauce needs staff verification"
         : "preparation needs staff review",
       detail: detail || "Preparation or ingredient wording needs staff verification.",
     };

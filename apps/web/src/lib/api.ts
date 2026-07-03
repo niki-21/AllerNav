@@ -81,11 +81,12 @@ export function buildNearbySuggestionPayload(
   allergens: AllergyTag[],
   candidatePlaces: PlaceSummary[],
   allowBackgroundScan = false,
+  searchQuery = question,
 ) {
   const candidates = candidatePlaces.slice(0, 8);
   return {
     question,
-    query: question,
+    query: searchQuery,
     center,
     allergens,
     candidate_place_ids: candidates.map((place) => place.id),
@@ -209,6 +210,7 @@ export async function askNearbyPlaces(
   allergens: AllergyTag[],
   candidatePlaces: PlaceSummary[],
   allowBackgroundScan = false,
+  searchQuery = question,
 ): Promise<NearbySuggestionResponse> {
   const response = await fetch(`${API_PREFIX}/rag/nearby-suggestions`, {
     method: "POST",
@@ -216,7 +218,7 @@ export async function askNearbyPlaces(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(
-      buildNearbySuggestionPayload(question, center, allergens, candidatePlaces, allowBackgroundScan),
+      buildNearbySuggestionPayload(question, center, allergens, candidatePlaces, allowBackgroundScan, searchQuery),
     ),
   });
   if (!response.ok) {

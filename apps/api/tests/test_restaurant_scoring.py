@@ -1,5 +1,5 @@
 from allernav_api.models import AllergyTag, MenuItem, MenuSection, MenuSource, SourceType
-from allernav_api.restaurant_scoring import score_restaurant_menu
+from allernav_api.restaurant_scoring import has_confirmed_allergen_risk_review, score_restaurant_menu
 
 
 def menu_source(items: list[MenuItem]) -> MenuSource:
@@ -23,8 +23,8 @@ def test_restaurant_score_penalizes_selected_allergen_matches() -> None:
     assert lower_risk.possible_lower_risk_count == 1
     assert concern.avoid_count == 1
     assert concern.score < lower_risk.score
-    assert lower_risk.label == "Better candidate, still verify"
-    assert concern.label == "Limited fit / scan needed"
+    assert lower_risk.label == "Strong candidate, still verify"
+    assert concern.label == "High concern"
 
 
 def test_restaurant_score_rewards_possible_lower_risk_ratio() -> None:
@@ -59,7 +59,7 @@ def test_some_avoid_items_do_not_sink_a_menu_with_many_possible_options() -> Non
     assert score.avoid_count == 2
     assert score.possible_lower_risk_count == 8
     assert score.score >= 75
-    assert score.label == "Better candidate, still verify"
+    assert score.label == "Strong candidate, still verify"
 
 
 def test_restaurant_score_does_not_reward_menu_size_alone() -> None:
@@ -132,4 +132,60 @@ def test_ichiran_style_menu_scores_as_better_candidate_for_fish() -> None:
     assert score.needs_check_count == 3
     assert score.avoid_count == 0
     assert 70 <= score.score <= 85
-    assert score.label == "Better candidate, still verify"
+    assert score.label == "Strong candidate, still verify"
+
+
+def test_several_possible_items_and_one_avoid_do_not_score_extremely_low() -> None:
+    items = [
+        MenuItem(name=f"Vegetable Plate {index}", description="Vegetables, rice, and herbs")
+        for index in range(4)
+    ] + [MenuItem(name="Grilled Salmon")]
+
+    score = score_restaurant_menu(menu_source(items), [AllergyTag.FISH])
+
+    assert score.possible_lower_risk_count == 4
+    assert score.avoid_count == 1
+    assert score.score >= 75
+
+
+def test_buffet_or_shared_prep_signal_lowers_restaurant_score() -> None:
+    source = menu_source(
+        [
+            MenuItem(name="Steamed Rice"),
+            MenuItem(name="Roasted Vegetables"),
+            MenuItem(name="Garden Salad"),
+        ]
+    ).model_copy(update={"raw_text": "All-you-can-eat buffet with a shared grill."})
+
+    regular = score_restaurant_menu(menu_source(source.sections[0].items), [AllergyTag.FISH])
+    buffet = score_restaurant_menu(source, [AllergyTag.FISH])
+
+    assert buffet.buffet_or_shared_prep_signal is True
+    assert buffet.score == regular.score - 20
+
+
+def test_confirmed_allergen_review_lowers_restaurant_score() -> None:
+    source = menu_source(
+        [
+            MenuItem(name="Steamed Rice"),
+            MenuItem(name="Roasted Vegetables"),
+            MenuItem(name="Garden Salad"),
+        ]
+    )
+
+    regular = score_restaurant_menu(source, [AllergyTag.FISH])
+    with_review = score_restaurant_menu(source, [AllergyTag.FISH], confirmed_allergen_review=True)
+
+    assert with_review.confirmed_allergen_review is True
+    assert with_review.score == regular.score - 20
+
+
+def test_confirmed_allergen_review_requires_risk_phrase_and_selected_allergen() -> None:
+    assert has_confirmed_allergen_risk_review(
+        ["I had an allergic reaction after being served salmon."],
+        [AllergyTag.FISH],
+    )
+    assert not has_confirmed_allergen_risk_review(
+        ["The salmon was delicious and service was slow."],
+        [AllergyTag.FISH],
+    )

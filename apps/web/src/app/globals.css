@@ -1093,6 +1093,43 @@ textarea {
   color: #3f6459;
 }
 
+.nearby-rag-menu-preview {
+  display: grid;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.nearby-rag-menu-preview small {
+  line-height: 1.35;
+}
+
+.nearby-rag-menu-preview b {
+  color: #3c4043;
+  font-weight: 700;
+}
+
+.nearby-intent-mismatch {
+  color: #8a4b08 !important;
+}
+
+.nearby-rag-next-action {
+  padding-top: 8px;
+  border-top: 1px solid rgba(60, 64, 67, 0.1);
+  color: #3f6459 !important;
+  font-size: 0.8rem !important;
+  font-weight: 650;
+}
+
+.nearby-rag-details ul {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #4f555a;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 .scan-top-places-button {
   min-height: 36px;
   border: 1px solid #0f7b61;

@@ -50,7 +50,6 @@ FISH_SIMPLE_ITEM_TERMS = (
 
 MENU_ALLERGEN_ALIASES: dict[AllergyTag, tuple[str, ...]] = {
     AllergyTag.FISH: (
-        "seafood",
         "tilapia",
         "trout",
         "haddock",
@@ -65,6 +64,17 @@ MENU_ALLERGEN_ALIASES: dict[AllergyTag, tuple[str, ...]] = {
     ),
     AllergyTag.SHELLFISH: ("seafood", "clam", "mussel", "oyster", "crawfish", "crayfish"),
 }
+
+FISH_SHELLFISH_CONTEXT_TERMS = (
+    "seafood",
+    "oyster",
+    "mussel",
+    "shrimp",
+    "crab",
+    "lobster",
+    "clam",
+    "scallop",
+)
 
 NON_FOOD_CATEGORY_NAMES = {
     "add-ons",
@@ -158,13 +168,12 @@ def classify_menu_item(
 
     selected_set = set(selected_allergens)
     if selected_set == {AllergyTag.FISH}:
+        shellfish_terms = [term for term in FISH_SHELLFISH_CONTEXT_TERMS if term_matches(allergen_text, term)]
         fish_context_terms = [term for term in FISH_PREPARATION_CONTEXT_TERMS if term_matches(text, term)]
         simple_fish_item = any(term_matches(text, term) for term in FISH_SIMPLE_ITEM_TERMS)
         sauce_terms = [term for term in FISH_SAUCE_TERMS if term_matches(text, term)]
         marinade_terms = [term for term in FISH_MARINADE_TERMS if term_matches(text, term)]
-        preparation_terms = fish_context_terms + marinade_terms + (
-            [] if simple_fish_item or not fish_context_terms else sauce_terms
-        )
+        preparation_terms = shellfish_terms + fish_context_terms + marinade_terms + ([] if simple_fish_item else sauce_terms)
     else:
         preparation_terms = [term for term in PREPARATION_RISK_TERMS if term_matches(text, term)]
     if preparation_terms:
@@ -175,7 +184,7 @@ def classify_menu_item(
                 "risk_label": "needs_check",
                 "matched_allergens": [],
                 "risk_reasons": [
-                    "Broth or sauce may need staff verification."
+                    "Seafood, broth, or sauce may need staff verification."
                     if selected_set == {AllergyTag.FISH}
                     else f"Preparation wording needs staff verification: {term_text}."
                 ],

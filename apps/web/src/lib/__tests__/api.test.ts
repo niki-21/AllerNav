@@ -10,6 +10,22 @@ import {
   menuScanErrorMessage,
   nearbyRagErrorMessage,
 } from "../api.ts";
+import { extractSearchIntent } from "../searchIntent.ts";
+
+test("extractSearchIntent preserves French cuisine intent", () => {
+  assert.equal(extractSearchIntent("I want a french restaurant", ""), "French restaurants");
+});
+
+test("extractSearchIntent preserves cheap burger intent", () => {
+  assert.equal(extractSearchIntent("I want a cheap burger restaurant", ""), "cheap burger restaurants");
+});
+
+test("extractSearchIntent keeps cafe intent near a named location", () => {
+  assert.equal(
+    extractSearchIntent("We are going to Central Park, I want cute cafes", ""),
+    "cute cafes near Central Park",
+  );
+});
 
 test("buildSearchPayload keeps query, center, and allergens aligned", () => {
   assert.deepEqual(
@@ -92,10 +108,12 @@ test("buildNearbySuggestionPayload keeps visible candidates for cuisine prompts"
       { lat: 40, lng: -73 },
       ["sesame"],
       candidates,
+      false,
+      "French restaurants",
     ),
     {
       question: "I want a french restaurant",
-      query: "I want a french restaurant",
+      query: "French restaurants",
       center: { lat: 40, lng: -73 },
       allergens: ["sesame"],
       candidate_place_ids: ["place-a", "place-b"],
@@ -132,6 +150,10 @@ test("menu rows hide repeated confidence and RAG cards show one restaurant score
   assert.equal(pageSource.includes("suggestion.restaurant_fit_score}/100"), false);
   assert.equal(pageSource.includes("hasScannedMenuEvidence(suggestion)"), true);
   assert.equal(pageSource.includes("nearbyBucketSummary(suggestion)"), true);
+  assert.equal(pageSource.includes("Next: {suggestion.next_action}"), false);
+  assert.equal(pageSource.includes("Ask staff about sauces, broths, and shared prep before ordering."), true);
+  assert.equal(pageSource.includes("<summary>Evidence details</summary>"), true);
+  assert.equal(pageSource.includes("<summary>Staff questions</summary>"), true);
 });
 
 test("Agentic RAG hides unscanned allergy scores and polls started scans", () => {
@@ -153,7 +175,8 @@ test("Agentic RAG resets when the active search context changes", () => {
 
 test("Ask AllerNav searches the current map area before requesting RAG candidates", () => {
   const source = readFileSync(new URL("../../app/page.tsx", import.meta.url), "utf8");
-  assert.equal(source.includes('visiblePlaces = await runSearch(query.trim() || "restaurants", mapCenter, selectedAllergens)'), true);
+  assert.equal(source.includes("const intentQuery = extractSearchIntent(question, query)"), true);
+  assert.equal(source.includes("visiblePlaces = await runSearch(intentQuery, mapCenter, selectedAllergens)"), true);
   assert.equal(source.includes('setNearbyAskError("No restaurants were found in this area.'), true);
   assert.equal(source.includes('"Ready to search this area"'), true);
   assert.equal(source.includes('"Searching area…"'), true);

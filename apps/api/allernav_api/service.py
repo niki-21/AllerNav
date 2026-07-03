@@ -48,7 +48,11 @@ from .models import (
     SearchIndexResponse,
     UserProfileResponse,
 )
-from .restaurant_scoring import RestaurantFitScore, score_restaurant_menu
+from .restaurant_scoring import (
+    RestaurantFitScore,
+    has_confirmed_allergen_risk_review,
+    score_restaurant_menu,
+)
 from .apify_reviews import fetch_apify_reviews, load_cached_reviews
 from .scoring import analyze_place
 
@@ -106,7 +110,19 @@ async def get_place_details_service(
     menu = load_place_menu(place["id"]) if menu_source else None
     if menu:
         menu = classify_place_menu(menu, selected_allergens)
-    restaurant_fit = score_restaurant_menu(menu_source, selected_allergens) if selected_allergens else None
+    restaurant_fit = (
+        score_restaurant_menu(
+            menu_source,
+            selected_allergens,
+            confirmed_allergen_review=has_confirmed_allergen_risk_review(
+                [item.text for item in evidence],
+                selected_allergens,
+            ),
+            restaurant_context=f"{place['name']} {place.get('primary_type') or ''}",
+        )
+        if selected_allergens
+        else None
+    )
     if menu and restaurant_fit:
         menu = menu.model_copy(update=restaurant_fit_menu_fields(restaurant_fit))
     if not summary.fit_score:
@@ -198,7 +214,14 @@ async def get_place_menu_service(place_id: str, allergens: list[AllergyTag] | No
     menu = classify_place_menu(load_place_menu(place_id), selected_allergens)
     if not selected_allergens:
         return menu
-    fit = score_restaurant_menu(load_menu_source(place_id), selected_allergens)
+    fit = score_restaurant_menu(
+        load_menu_source(place_id),
+        selected_allergens,
+        confirmed_allergen_review=has_confirmed_allergen_risk_review(
+            [review.text for review in load_cached_reviews(place_id)],
+            selected_allergens,
+        ),
+    )
     return menu.model_copy(update=restaurant_fit_menu_fields(fit))
 
 
@@ -211,6 +234,8 @@ def restaurant_fit_menu_fields(fit: RestaurantFitScore) -> dict[str, object]:
         "needs_check_count": fit.needs_check_count,
         "possible_lower_risk_count": fit.possible_lower_risk_count,
         "insufficient_info_count": fit.insufficient_info_count,
+        "possible_item_names": list(fit.possible_item_names),
+        "avoid_item_names": list(fit.avoid_item_names),
     }
 
 
